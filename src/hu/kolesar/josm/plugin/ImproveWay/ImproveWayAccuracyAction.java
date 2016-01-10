@@ -392,7 +392,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
             if (!alt && !ctrl && candidateNode != null) {
                 b.reset();
-                drawIntersectingWayHelperLines(mv, b);
+                drawIntersectingWayHelperLines(mv, b, newPoint);
                 g.setStroke(moveNodeIntersectingStroke);
                 g.draw(b);
             }
@@ -614,7 +614,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         return Geometry.getLineLineIntersection(p1r, p12, p21, p2r);
     }
 
-    protected void drawIntersectingWayHelperLines(MapView mv, GeneralPath b) {
+    protected void drawIntersectingWayHelperLines(MapView mv, GeneralPath b, Point newPoint) {
         for (final OsmPrimitive referrer : candidateNode.getReferrers()) {
             if (!(referrer instanceof Way) || targetWay.equals(referrer)) {
                 continue;
@@ -626,12 +626,12 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 }
                 if (i > 0) {
                     final Point p = mv.getPoint(nodes.get(i - 1));
-                    b.moveTo(mousePos.x, mousePos.y);
+                    b.moveTo(newPoint.x, newPoint.y);
                     b.lineTo(p.x, p.y);
                 }
                 if (i < nodes.size() - 1) {
                     final Point p = mv.getPoint(nodes.get(i + 1));
-                    b.moveTo(mousePos.x, mousePos.y);
+                    b.moveTo(newPoint.x, newPoint.y);
                     b.lineTo(p.x, p.y);
                 }
             }
