@@ -1,5 +1,6 @@
 // License: GPL. For details, see LICENSE file.
-package org.openstreetmap.josm.actions.mapmode;
+package hu.kolesar.josm.plugin.ImproveWay;
+import org.openstreetmap.josm.actions.mapmode.MapMode;
 
 import static org.openstreetmap.josm.tools.I18n.marktr;
 import static org.openstreetmap.josm.tools.I18n.tr;
@@ -10,13 +11,21 @@ import java.awt.Cursor;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Stroke;
+import java.awt.BasicStroke;
+import java.awt.RenderingHints;
+import java.awt.FontMetrics;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.geom.GeneralPath;
+import java.awt.geom.Line2D;
+import java.awt.geom.Arc2D;
+import java.awt.geom.Ellipse2D;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.swing.JOptionPane;
 
@@ -29,7 +38,10 @@ import org.openstreetmap.josm.command.MoveCommand;
 import org.openstreetmap.josm.command.SequenceCommand;
 import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.SelectionChangedListener;
+import org.openstreetmap.josm.data.Preferences.PreferenceChangeEvent;
+import org.openstreetmap.josm.data.Preferences.PreferenceChangedListener;
 import org.openstreetmap.josm.data.coor.EastNorth;
+import org.openstreetmap.josm.data.coor.LatLon;
 import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
@@ -43,15 +55,20 @@ import org.openstreetmap.josm.gui.layer.MapViewPaintable;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.gui.util.ModifierListener;
+import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
 import org.openstreetmap.josm.tools.ImageProvider;
 import org.openstreetmap.josm.tools.Pair;
 import org.openstreetmap.josm.tools.Shortcut;
+import org.openstreetmap.josm.actions.ExpertToggleAction;
+import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
+import org.openstreetmap.josm.tools.Geometry;
 
 /**
  * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
  */
 public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintable,
-        SelectionChangedListener, ModifierListener {
+        SelectionChangedListener, ModifierListener, KeyPressReleaseListener,
+        ExpertModeChangeListener, PreferenceChangedListener {
 
     enum State {
         selecting, improving
@@ -79,26 +96,56 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     private final Cursor cursorImproveLock;
 
     private Color guideColor;
+    private Color turnColor;
+    private Color distanceColor;
+    private Color arcFillColor;
+    private Color arcStrokeColor;
+    private Color perpendicularLineColor;
+    private Color equalAngleCircleColor;
+
     private transient Stroke selectTargetWayStroke;
     private transient Stroke moveNodeStroke;
     private transient Stroke addNodeStroke;
     private transient Stroke deleteNodeStroke;
+    private transient Stroke arcStroke;
+    private transient Stroke perpendicularLineStroke;
+    private transient Stroke equalAngleCircleStroke;
     private int dotSize;
 
     private boolean selectionChangedBlocked;
 
     protected String oldModeHelpText;
 
+    private int arcRadiusPixels;
+    private int perpendicularLengthPixels;
+    private int turnTextDistance;
+    private int distanceTextDistance;
+    private int equalAngleCircleRadius;
+    private long longKeypressTime;
+
+    private boolean helpersEnabled = false;
+    private boolean helpersUseOriginal = false;
+    private final transient Shortcut helpersShortcut;
+    private long keypressTime = 0;
+    private boolean helpersEnabledBeforeKeypressed = false;
+    private Timer longKeypressTimer;
+    private boolean isExpert = false;
+
+    private boolean mod4 = false; // Windows/Super/Meta key
+
     /**
      * Constructs a new {@code ImproveWayAccuracyAction}.
      * @param mapFrame Map frame
      */
     public ImproveWayAccuracyAction(MapFrame mapFrame) {
-        super(tr("Improve Way Accuracy"), "improvewayaccuracy",
-                tr("Improve Way Accuracy mode"),
-                Shortcut.registerShortcut("mapmode:ImproveWayAccuracy",
-                tr("Mode: {0}", tr("Improve Way Accuracy")),
+        super(tr("Improve Way"), "improveway",
+                tr("Improve Way mode"),
+                Shortcut.registerShortcut("mapmode:ImproveWay",
+                tr("Mode: {0}", tr("Improve Way")),
                 KeyEvent.VK_W, Shortcut.DIRECT), mapFrame, Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+
+        helpersShortcut = Shortcut.registerShortcut("mapmode:enablewayaccuracyhelpers",
+                tr("Mode: Enable way accuracy helpers"), KeyEvent.CHAR_UNDEFINED, Shortcut.NONE);
 
         cursorSelect = ImageProvider.getCursor("normal", "mode");
         cursorSelectHover = ImageProvider.getCursor("hand", "mode");
@@ -108,6 +155,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         cursorImproveAddLock = ImageProvider.getCursor("crosshair",
                 "add_node_lock");
         cursorImproveLock = ImageProvider.getCursor("crosshair", "lock");
+        ExpertToggleAction.addExpertModeChangeListener(this, true);
+        Main.pref.addPreferenceChangeListener(this);
         readPreferences();
     }
 
@@ -120,7 +169,6 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             return;
         }
         super.enterMode();
-        readPreferences();
 
         mv = Main.map.mapView;
         mousePos = null;
@@ -132,29 +180,61 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         updateStateByCurrentSelection();
 
+        Main.map.keyDetector.addKeyListener(this);
         Main.map.mapView.addMouseListener(this);
         Main.map.mapView.addMouseMotionListener(this);
         Main.map.mapView.addTemporaryLayer(this);
         DataSet.addSelectionListener(this);
 
         Main.map.keyDetector.addModifierListener(this);
+
+        if (!isExpert) return;
+        helpersEnabled = false;
+        keypressTime = 0;
+        resetTimer();
+        longKeypressTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                helpersEnabled = true;
+                helpersUseOriginal = true;
+                Main.map.mapView.repaint();
+            }
+        }, longKeypressTime);
     }
 
     private void readPreferences() {
         guideColor = Main.pref.getColor(marktr("improve way accuracy helper line"), null);
         if (guideColor == null) guideColor = PaintColors.HIGHLIGHT.get();
 
+        turnColor = Main.pref.getColor(marktr("improve way accuracy helper turn angle text"), new Color(240, 240, 240, 200));
+        distanceColor = Main.pref.getColor(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120));
+        arcFillColor = Main.pref.getColor(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50));
+        arcStrokeColor = Main.pref.getColor(marktr("improve way accuracy helper arc stroke"), new Color(240, 240, 240, 150));
+        perpendicularLineColor = Main.pref.getColor(marktr("improve way accuracy helper perpendicular line"), new Color(240, 240, 240, 150));
+        equalAngleCircleColor = Main.pref.getColor(marktr("improve way accuracy helper equal angle circle"), new Color(240, 240, 240, 150));
+
         selectTargetWayStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.select-target", "2"));
         moveNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.move-node", "1 6"));
         addNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.add-node", "1"));
         deleteNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.delete-node", "1"));
+        arcStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-arc", "1"));
+        perpendicularLineStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-perpendicular-line", "1 6"));
+        equalAngleCircleStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-eual-angle-circle", "1"));
+
         dotSize = Main.pref.getInteger("improvewayaccuracy.dot-size", 6);
+        arcRadiusPixels = Main.pref.getInteger("improvewayaccuracy.helper-arc-radius", 200);
+        perpendicularLengthPixels = Main.pref.getInteger("improvewayaccuracy.helper-perpendicular-line-length", 100);
+        turnTextDistance = Main.pref.getInteger("improvewayaccuracy.helper-turn-text-distance", 15);
+        distanceTextDistance = Main.pref.getInteger("improvewayaccuracy.helper-distance-text-distance", 15);
+        equalAngleCircleRadius = Main.pref.getInteger("improvewayaccuracy.helper-equal-angle-circle-radius", 15);
+        longKeypressTime = Main.pref.getInteger("improvewayaccuracy.long-keypress-time", 250);
     }
 
     @Override
     public void exitMode() {
         super.exitMode();
 
+        Main.map.keyDetector.removeKeyListener(this);
         Main.map.mapView.removeMouseListener(this);
         Main.map.mapView.removeMouseMotionListener(this);
         Main.map.mapView.removeTemporaryLayer(this);
@@ -212,11 +292,9 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
      */
     @Override
     public void paint(Graphics2D g, MapView mv, Bounds bbox) {
-        if (mousePos == null) {
-            return;
-        }
 
         g.setColor(guideColor);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
         if (state == State.selecting && targetWay != null) {
             // Highlighting the targetWay in Selecting state
@@ -252,7 +330,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 g.setStroke(addNodeStroke);
                 p1 = mv.getPoint(candidateSegment.getFirstNode());
                 p2 = mv.getPoint(candidateSegment.getSecondNode());
-            } else if (!alt && !ctrl && candidateNode != null) {
+            } else if (!(alt^ctrl) && candidateNode != null) {
                 g.setStroke(moveNodeStroke);
                 List<Pair<Node, Node>> wpps = targetWay.getNodePairs(false);
                 for (Pair<Node, Node> wpp : wpps) {
@@ -279,6 +357,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 // TODO: indicate what part that will be deleted? (for end nodes)
             }
 
+            EastNorth newPointEN = getNewPointEN();
+            Point newPoint = mv.getPoint(newPointEN);
 
             // Drawing preview lines
             GeneralPath b = new GeneralPath();
@@ -288,14 +368,14 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                     b.moveTo(p1.x, p1.y);
                     b.lineTo(p2.x, p2.y);
                 }
-            } else {
+            } else if (newPointEN != null && newPoint != null) {
                 // In add or move mode
                 if (p1 != null) {
-                    b.moveTo(mousePos.x, mousePos.y);
+                    b.moveTo(newPoint.x, newPoint.y);
                     b.lineTo(p1.x, p1.y);
                 }
                 if (p2 != null) {
-                    b.moveTo(mousePos.x, mousePos.y);
+                    b.moveTo(newPoint.x, newPoint.y);
                     b.lineTo(p2.x, p2.y);
                 }
             }
@@ -303,11 +383,226 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
             // Highlighting candidateNode
             if (candidateNode != null) {
-                p1 = mv.getPoint(candidateNode);
-                g.fillRect(p1.x - dotSize/2, p1.y - dotSize/2, dotSize, dotSize);
+                Point p = mv.getPoint(candidateNode);
+                g.setColor(guideColor);
+                g.fillRect(p.x - dotSize/2, p.y - dotSize/2, dotSize, dotSize);
             }
 
+            // Painting helpers visualizing turn angles and more
+            if (!helpersEnabled) return;
+
+            // Perpendicular line at half distance
+            if (!(alt && !ctrl) && p1 != null && p2 != null) {
+                Point half = new Point(
+                    (p1.x + p2.x)/2,
+                    (p1.y + p2.y)/2
+                );
+                double heading = Math.atan2(
+                    p2.y-p1.y,
+                    p2.x-p1.x
+                ) + Math.PI/2;
+                g.setStroke(perpendicularLineStroke);
+                g.setColor(perpendicularLineColor);
+                g.draw(new Line2D.Double(
+                    half.x + perpendicularLengthPixels * Math.cos(heading),
+                    half.y + perpendicularLengthPixels * Math.sin(heading),
+                    half.x - perpendicularLengthPixels * Math.cos(heading),
+                    half.y - perpendicularLengthPixels * Math.sin(heading)
+                ));
+            }
+
+            // Pie with turn angle
+            Node node;
+            LatLon coor, lastcoor = null;
+            Point point, lastpoint = null;
+            double distance, lastdistance = 0;
+            double heading, lastheading = 0;
+            double radius, lastradius = 0;
+            double turn;
+            Arc2D arc;
+            Ellipse2D circle;
+            double arcRadius;
+            boolean candidateSegmentVisited = false;
+            int nodeCounter = 0;
+            int nodesCount = targetWay.getNodesCount();
+            int endLoop = nodesCount;
+            if (targetWay.isClosed()) endLoop++;
+            for (int i=0; i<endLoop; i++) {
+                // when way is closed we visit second node again
+                // to get turn for start/end node
+                node = targetWay.getNode(i == nodesCount ? 1 : i);
+                if (!helpersUseOriginal && newPointEN != null &&
+                    ctrl &&
+                    !candidateSegmentVisited &&
+                    candidateSegment != null &&
+                    candidateSegment.getSecondNode() == node
+                ) {
+                    coor = Main.getProjection().eastNorth2latlon(newPointEN);
+                    point = newPoint;
+                    candidateSegmentVisited = true;
+                    i--;
+                } else if (!helpersUseOriginal && newPointEN != null && !alt && !ctrl && node == candidateNode) {
+                    coor = Main.getProjection().eastNorth2latlon(newPointEN);
+                    point = newPoint;
+                } else if (!helpersUseOriginal && alt && !ctrl && node == candidateNode) {
+                    continue;
+                } else {
+                    coor = node.getCoor();
+                    point = mv.getPoint(coor);
+                }
+                if (nodeCounter>=1) {
+                    heading = fixHeading(-90-lastcoor.heading(coor)*180/Math.PI);
+                    distance = lastcoor.greatCircleDistance(coor);
+                    radius = point.distance(lastpoint);
+                    if (nodeCounter>=2) {
+                        turn = Math.abs(fixHeading(heading-lastheading));
+                        double fixedHeading = fixHeading(heading - lastheading);
+                        g.setColor(turnColor);
+                        drawDisplacedlabel(
+                            lastpoint.x,
+                            lastpoint.y,
+                            turnTextDistance,
+                            (lastheading + fixedHeading/2 + (fixedHeading >= 0 ? 90 : -90))*Math.PI/180,
+                            String.format("%1.0f °", turn),
+                            g
+                        );
+                        arcRadius = arcRadiusPixels;
+                        arc = new Arc2D.Double(
+                            lastpoint.x-arcRadius,
+                            lastpoint.y-arcRadius,
+                            arcRadius*2,
+                            arcRadius*2,
+                            -heading + (fixedHeading >= 0 ? 90 : -90),
+                            fixedHeading,
+                            Arc2D.PIE
+                        );
+                        g.setStroke(arcStroke);
+                        g.setColor(arcFillColor);
+                        g.fill(arc);
+                        g.setColor(arcStrokeColor);
+                        g.draw(arc);
+                    }
+
+                    // Display segment length
+                    // avoid doubling first segment on closed ways
+                    if (i != nodesCount) {
+                        g.setColor(distanceColor);
+                        drawDisplacedlabel(
+                            (lastpoint.x+point.x)/2,
+                            (lastpoint.y+point.y)/2,
+                            distanceTextDistance,
+                            (heading + 90)*Math.PI/180,
+                            String.format("%1.0f m", distance),
+                            g
+                        );
+                    }
+
+                    lastradius = radius;
+                    lastheading = heading;
+                    lastdistance = distance;
+                }
+                lastcoor = coor;
+                lastpoint = point;
+                nodeCounter++;
+            }
+
+            // Find and display point where turn angle will be same with two neighbours
+            EastNorth equalAngleEN = findEqualAngleEN();
+            if (equalAngleEN != null) {
+                Point equalAnglePoint = mv.getPoint(equalAngleEN);
+                Ellipse2D.Double equalAngleCircle = new Ellipse2D.Double(
+                    equalAnglePoint.x-equalAngleCircleRadius/2,
+                    equalAnglePoint.y-equalAngleCircleRadius/2,
+                    equalAngleCircleRadius,
+                    equalAngleCircleRadius);
+                g.setStroke(equalAngleCircleStroke);
+                g.setColor(equalAngleCircleColor);
+                g.draw(equalAngleCircle);
+            }
         }
+    }
+
+    // returns node index for closed ways using possibly under/overflowed index
+    // returns -1 if not closed and out of range
+    private int fixIndex(int count, boolean closed, int index) {
+        if (index>=0 && index<count) return index;
+        if (!closed) return -1;
+        while (index<0) index += count;
+        while (index>=count) index -= count;
+        return index;
+    }
+
+    private double fixHeading(double heading) {
+        while (heading < -180) heading += 360;
+        while (heading > 180) heading -= 360;
+        return heading;
+    }
+
+    public static void drawDisplacedlabel(
+        int x,
+        int y,
+        int distance,
+        double heading,
+        String labelText,
+        Graphics2D g
+    ) {
+        int labelWidth, labelHeight;
+        FontMetrics fontMetrics = g.getFontMetrics();
+        labelWidth = fontMetrics.stringWidth(labelText);
+        labelHeight = fontMetrics.getHeight();
+        g.drawString(
+           labelText,
+            (int) (x+(distance+(labelWidth-labelHeight)/2)*Math.cos(heading)-labelWidth/2),
+            (int) (y+distance*Math.sin(heading)+labelHeight/2)
+        );
+    }
+
+    public EastNorth getNewPointEN() {
+        if (mod4) {
+            return findEqualAngleEN();
+        } else if (mousePos != null) {
+            return mv.getEastNorth(mousePos.x, mousePos.y);
+        } else {
+            return null;
+        }
+    }
+
+    public EastNorth findEqualAngleEN() {
+        int index1 = -1;
+        int index2 = -1;
+        int realNodesCount = targetWay.getRealNodesCount();
+
+        for (int i=0; i<realNodesCount; i++) {
+            Node node = targetWay.getNode(i);
+            if (node == candidateNode) {
+                index1 = i-1;
+                index2 = i+1;
+            }
+            if (candidateSegment != null) {
+                if (node == candidateSegment.getFirstNode()) index1 = i;
+                if (node == candidateSegment.getSecondNode()) index2 = i;
+            }
+        }
+
+        int i11 = fixIndex(realNodesCount, targetWay.isClosed(), index1-1);
+        int i12 = fixIndex(realNodesCount, targetWay.isClosed(), index1);
+        int i21 = fixIndex(realNodesCount, targetWay.isClosed(), index2);
+        int i22 = fixIndex(realNodesCount, targetWay.isClosed(), index2+1);
+        if (i11<0 || i12<0 || i21<0 || i22<0) return null;
+
+        EastNorth p11 = targetWay.getNode(i11).getEastNorth();
+        EastNorth p12 = targetWay.getNode(i12).getEastNorth();
+        EastNorth p21 = targetWay.getNode(i21).getEastNorth();
+        EastNorth p22 = targetWay.getNode(i22).getEastNorth();
+
+        double a1 = Geometry.getSegmentAngle(p11, p12);
+        double a2 = Geometry.getSegmentAngle(p21, p22);
+        double a = fixHeading((a2-a1)*180/Math.PI)*Math.PI/180/3;
+
+        EastNorth p1r = p11.rotate(p12, -a);
+        EastNorth p2r = p22.rotate(p21, a);
+
+        return Geometry.getLineLineIntersection(p1r, p12, p21, p2r);
     }
 
     // -------------------------------------------------------------------------
@@ -363,15 +658,16 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         updateKeyModifiers(e);
         mousePos = e.getPoint();
+        EastNorth newPointEN = getNewPointEN();
 
         if (state == State.selecting) {
             if (targetWay != null) {
                 getCurrentDataSet().setSelected(targetWay.getPrimitiveId());
                 updateStateByCurrentSelection();
             }
-        } else if (state == State.improving && mousePos != null) {
+        } else if (state == State.improving && newPointEN != null) {
             // Checking if the new coordinate is outside of the world
-            if (mv.getLatLon(mousePos.x, mousePos.y).isOutSideWorld()) {
+            if (Main.getProjection().eastNorth2latlon(newPointEN).isOutSideWorld()) {
                 JOptionPane.showMessageDialog(Main.parent,
                         tr("Cannot add a node outside of the world."),
                         tr("Warning"), JOptionPane.WARNING_MESSAGE);
@@ -385,8 +681,9 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 Collection<Command> virtualCmds = new LinkedList<>();
 
                 // Creating a new node
-                Node virtualNode = new Node(mv.getEastNorth(mousePos.x,
-                        mousePos.y));
+                Node virtualNode = new Node(
+                    Main.getProjection().eastNorth2latlon(newPointEN)
+                );
                 virtualCmds.add(new AddCommand(virtualNode));
 
                 // Looking for candidateSegment copies in ways that are
@@ -467,14 +764,15 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             } else if (candidateNode != null) {
                 // Moving the highlighted node
                 EastNorth nodeEN = candidateNode.getEastNorth();
-                EastNorth cursorEN = mv.getEastNorth(mousePos.x, mousePos.y);
 
-                Main.main.undoRedo.add(new MoveCommand(candidateNode, cursorEN.east() - nodeEN.east(), cursorEN.north()
+                Node saveCandidateNode = candidateNode;
+                Main.main.undoRedo.add(new MoveCommand(candidateNode, newPointEN.east() - nodeEN.east(), newPointEN.north()
                         - nodeEN.north()));
+                candidateNode = saveCandidateNode;
+
             }
         }
 
-        mousePos = null;
         updateCursor();
         updateStatusLine();
         Main.map.mapView.repaint();
@@ -628,5 +926,72 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         // Starting selecting by default
         startSelecting();
+    }
+
+    private void resetTimer() {
+        if (longKeypressTimer != null) {
+            try {
+                longKeypressTimer.cancel();
+                longKeypressTimer.purge();
+            } catch (IllegalStateException exception) {}
+        }
+        longKeypressTimer = new Timer();
+    }
+
+    @Override
+    public void doKeyPressed(KeyEvent e) {
+        if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
+            mod4 = true;
+            Main.map.mapView.repaint();
+            return;
+        }
+        if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e))return;
+        if (!isExpert) return;
+        keypressTime = System.currentTimeMillis();
+        helpersEnabledBeforeKeypressed = helpersEnabled;
+        if (!helpersEnabled) helpersEnabled = true;
+        helpersUseOriginal = true;
+        Main.map.mapView.repaint();
+    }
+
+    @Override
+    public void doKeyReleased(KeyEvent e) {
+        if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
+            mod4 = false;
+            Main.map.mapView.repaint();
+            return;
+        }
+        if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
+        if (!isExpert) return;
+        resetTimer();
+        long keyupTime = System.currentTimeMillis();
+        if (keypressTime == 0) { // comes from enterMode
+            helpersEnabled = false;
+        } else if (keyupTime-keypressTime > longKeypressTime) {
+            helpersEnabled = helpersEnabledBeforeKeypressed;
+        } else {
+            helpersEnabled = !helpersEnabledBeforeKeypressed;
+        }
+        helpersUseOriginal = false;
+        Main.map.mapView.repaint();
+    }
+
+    @Override
+    public void expertChanged(boolean isExpert) {
+        this.isExpert = isExpert;
+        if (!isExpert && helpersEnabled) {
+            helpersEnabled = false;
+            Main.map.mapView.repaint();
+        }
+    }
+
+    @Override
+    public void preferenceChanged(PreferenceChangeEvent e) {
+        if (!isEnabled()) return;
+        if (e.getKey().startsWith("improvewayaccuracy") ||
+            e.getKey().startsWith("color.improve.way.accuracy")) {
+            readPreferences();
+            Main.map.mapView.repaint();
+        }
     }
 }

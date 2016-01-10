@@ -1,5 +1,5 @@
 // License: GPL. For details, see LICENSE file.
-package org.openstreetmap.josm.actions.mapmode;
+package hu.kolesar.josm.plugin.ImproveWay;
 
 import java.awt.Point;
 import java.util.Collection;
