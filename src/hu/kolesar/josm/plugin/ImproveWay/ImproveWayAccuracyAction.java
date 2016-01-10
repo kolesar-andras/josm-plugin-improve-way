@@ -105,6 +105,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     private transient Stroke selectTargetWayStroke;
     private transient Stroke moveNodeStroke;
+    private transient Stroke moveNodeIntersectingStroke;
     private transient Stroke addNodeStroke;
     private transient Stroke deleteNodeStroke;
     private transient Stroke arcStroke;
@@ -215,6 +216,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         selectTargetWayStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.select-target", "2"));
         moveNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.move-node", "1 6"));
+        moveNodeIntersectingStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.move-node-intersecting", "1 2 6"));
         addNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.add-node", "1"));
         deleteNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.delete-node", "1"));
         arcStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-arc", "1"));
@@ -386,6 +388,13 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 Point p = mv.getPoint(candidateNode);
                 g.setColor(guideColor);
                 g.fillRect(p.x - dotSize/2, p.y - dotSize/2, dotSize, dotSize);
+            }
+
+            if (!alt && !ctrl && candidateNode != null) {
+                b.reset();
+                drawIntersectingWayHelperLines(mv, b);
+                g.setStroke(moveNodeIntersectingStroke);
+                g.draw(b);
             }
 
             // Painting helpers visualizing turn angles and more
@@ -603,6 +612,30 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         EastNorth p2r = p22.rotate(p21, a);
 
         return Geometry.getLineLineIntersection(p1r, p12, p21, p2r);
+    }
+
+    protected void drawIntersectingWayHelperLines(MapView mv, GeneralPath b) {
+        for (final OsmPrimitive referrer : candidateNode.getReferrers()) {
+            if (!(referrer instanceof Way) || targetWay.equals(referrer)) {
+                continue;
+            }
+            final List<Node> nodes = ((Way) referrer).getNodes();
+            for (int i = 0; i < nodes.size(); i++) {
+                if (!candidateNode.equals(nodes.get(i))) {
+                    continue;
+                }
+                if (i > 0) {
+                    final Point p = mv.getPoint(nodes.get(i - 1));
+                    b.moveTo(mousePos.x, mousePos.y);
+                    b.lineTo(p.x, p.y);
+                }
+                if (i < nodes.size() - 1) {
+                    final Point p = mv.getPoint(nodes.get(i + 1));
+                    b.moveTo(mousePos.x, mousePos.y);
+                    b.lineTo(p.x, p.y);
+                }
+            }
+        }
     }
 
     // -------------------------------------------------------------------------

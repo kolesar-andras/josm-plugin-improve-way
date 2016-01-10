@@ -6,13 +6,15 @@ ImproveWay
 Installation
 ------------
 
-Download JAR file from <http://kolesar.turistautak.hu/osm/josm/plugins/ImproveWay.jar> and place it to plugins directory `~/.josm/plugins/`. Go to preferences (F12) and make three changes here:
+Download [ImproveWay.jar](http://kolesar.turistautak.hu/osm/josm/plugins/ImproveWay.jar) from and place it to plugins directory `~/.josm/plugins/`. Go to preferences (F12) and make the following changes:
 
 * enable plugin
 * enable expert mode (some features are hidden from beginner users)
 * disable keyboard shortcut W for builtin tool named Mode: Improve Way Accuracy (W): unset "use default" setting and set "disable" (if you can't find this entry, create a new empty layer to initialize tools)
 
 Keyboard shortcut change needs restart, after you will see a new icon on editing toolbar, similar to Improve Way Accuracy mode but greyscale.
+
+![icon](https://raw.githubusercontent.com/kolesar-andras/josm-plugin-improve-way/master/images/mapmode/improveway.png)
 
 Usage
 -----
