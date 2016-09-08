@@ -48,6 +48,7 @@ import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.WaySegment;
 import org.openstreetmap.josm.data.osm.visitor.paint.PaintColors;
+import org.openstreetmap.josm.data.preferences.ColorProperty;
 import org.openstreetmap.josm.gui.MapFrame;
 import org.openstreetmap.josm.gui.MapView;
 import org.openstreetmap.josm.gui.layer.Layer;
@@ -175,7 +176,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         mousePos = null;
         oldModeHelpText = "";
 
-        if (getCurrentDataSet() == null) {
+        if (getLayerManager().getEditDataSet() == null) {
             return;
         }
 
@@ -203,16 +204,17 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         }, longKeypressTime);
     }
 
-    private void readPreferences() {
-        guideColor = Main.pref.getColor(marktr("improve way accuracy helper line"), null);
+    @Override
+    protected void readPreferences() {
+        guideColor = new ColorProperty(marktr("improve way accuracy helper line"), (Color) null).get();
         if (guideColor == null) guideColor = PaintColors.HIGHLIGHT.get();
 
-        turnColor = Main.pref.getColor(marktr("improve way accuracy helper turn angle text"), new Color(240, 240, 240, 200));
-        distanceColor = Main.pref.getColor(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120));
-        arcFillColor = Main.pref.getColor(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50));
-        arcStrokeColor = Main.pref.getColor(marktr("improve way accuracy helper arc stroke"), new Color(240, 240, 240, 150));
-        perpendicularLineColor = Main.pref.getColor(marktr("improve way accuracy helper perpendicular line"), new Color(240, 240, 240, 150));
-        equalAngleCircleColor = Main.pref.getColor(marktr("improve way accuracy helper equal angle circle"), new Color(240, 240, 240, 150));
+        turnColor = new ColorProperty(marktr("improve way accuracy helper turn angle text"), new Color(240, 240, 240, 200)).get();
+        distanceColor = new ColorProperty(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120)).get();
+        arcFillColor = new ColorProperty(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50)).get();
+        arcStrokeColor = new ColorProperty(marktr("improve way accuracy helper arc stroke"), new Color(240, 240, 240, 150)).get();
+        perpendicularLineColor = new ColorProperty(marktr("improve way accuracy helper perpendicular line"), new Color(240, 240, 240, 150)).get();
+        equalAngleCircleColor = new ColorProperty(marktr("improve way accuracy helper equal angle circle"), new Color(240, 240, 240, 150)).get();
 
         selectTargetWayStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.select-target", "2"));
         moveNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.move-node", "1 6"));
@@ -282,7 +284,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     @Override
     protected void updateEnabledState() {
-        setEnabled(getEditLayer() != null);
+        setEnabled(getLayerManager().getEditLayer() != null);
     }
 
     // -------------------------------------------------------------------------
@@ -695,7 +697,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         if (state == State.selecting) {
             if (targetWay != null) {
-                getCurrentDataSet().setSelected(targetWay.getPrimitiveId());
+                getLayerManager().getEditDataSet().setSelected(targetWay.getPrimitiveId());
                 updateStateByCurrentSelection();
             }
         } else if (state == State.improving && newPointEN != null) {
@@ -787,7 +789,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 } else {
                     List<Node> nodeList = new ArrayList<>();
                     nodeList.add(candidateNode);
-                    Command deleteCmd = DeleteCommand.delete(getEditLayer(), nodeList, true);
+                    Command deleteCmd = DeleteCommand.delete(getLayerManager().getEditLayer(), nodeList, true);
                     if (deleteCmd != null) {
                         Main.main.undoRedo.add(deleteCmd);
                     }
@@ -906,12 +908,12 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     public void startImproving(Way targetWay) {
         state = State.improving;
 
-        Collection<OsmPrimitive> currentSelection = getCurrentDataSet().getSelected();
+        Collection<OsmPrimitive> currentSelection = getLayerManager().getEditDataSet().getSelected();
         if (currentSelection.size() != 1
                 || !currentSelection.iterator().next().equals(targetWay)) {
             selectionChangedBlocked = true;
-            getCurrentDataSet().clearSelection();
-            getCurrentDataSet().setSelected(targetWay.getPrimitiveId());
+            getLayerManager().getEditDataSet().clearSelection();
+            getLayerManager().getEditDataSet().setSelected(targetWay.getPrimitiveId());
             selectionChangedBlocked = false;
         }
 
@@ -932,7 +934,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     private void updateStateByCurrentSelection() {
         final List<Node> nodeList = new ArrayList<>();
         final List<Way> wayList = new ArrayList<>();
-        final Collection<OsmPrimitive> sel = getCurrentDataSet().getSelected();
+        final Collection<OsmPrimitive> sel = getLayerManager().getEditDataSet().getSelected();
 
         // Collecting nodes and ways from the selection
         for (OsmPrimitive p : sel) {
