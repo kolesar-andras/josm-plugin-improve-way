@@ -40,7 +40,7 @@ final class ImproveWayAccuracyHelper {
             return null;
         }
 
-        Node node = mv.getNearestNode(p, OsmPrimitive.isSelectablePredicate);
+        Node node = mv.getNearestNode(p, OsmPrimitive::isSelectable);
         Way candidate = null;
 
         if (node != null) {
@@ -56,11 +56,11 @@ final class ImproveWayAccuracyHelper {
             }
         }
 
-        return Main.map.mapView.getNearestWay(p, OsmPrimitive.isSelectablePredicate);
+        return Main.map.mapView.getNearestWay(p, OsmPrimitive::isSelectable);
     }
 
     /**
-     * Returns the nearest node to cursor. All nodes that are “behind” segments
+     * Returns the nearest node to cursor. All nodes that are behind segments
      * are neglected. This is to avoid way self-intersection after moving the
      * candidateNode to a new place.
      *
