@@ -6,7 +6,7 @@ ImproveWay
 Installation
 ------------
 
-Download [ImproveWay.jar](http://kolesar.turistautak.hu/osm/josm/plugins/ImproveWay.jar) from and place it to plugins directory `~/.josm/plugins/`. Go to preferences (F12) and make the following changes:
+Go to preferences (F12) and make the following changes:
 
 * enable plugin
 * enable expert mode (some features are hidden from beginner users)
