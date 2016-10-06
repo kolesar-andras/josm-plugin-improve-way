@@ -1,6 +1,5 @@
 // License: GPL. For details, see LICENSE file.
 package hu.kolesar.josm.plugin.ImproveWay;
-import org.openstreetmap.josm.actions.mapmode.MapMode;
 
 import static org.openstreetmap.josm.tools.I18n.marktr;
 import static org.openstreetmap.josm.tools.I18n.tr;
@@ -8,18 +7,17 @@ import static org.openstreetmap.josm.tools.I18n.trn;
 
 import java.awt.Color;
 import java.awt.Cursor;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Point;
-import java.awt.Stroke;
-import java.awt.BasicStroke;
 import java.awt.RenderingHints;
-import java.awt.FontMetrics;
+import java.awt.Stroke;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
-import java.awt.geom.GeneralPath;
-import java.awt.geom.Line2D;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
+import java.awt.geom.GeneralPath;
+import java.awt.geom.Line2D;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -30,6 +28,9 @@ import java.util.TimerTask;
 import javax.swing.JOptionPane;
 
 import org.openstreetmap.josm.Main;
+import org.openstreetmap.josm.actions.ExpertToggleAction;
+import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
+import org.openstreetmap.josm.actions.mapmode.MapMode;
 import org.openstreetmap.josm.command.AddCommand;
 import org.openstreetmap.josm.command.ChangeCommand;
 import org.openstreetmap.josm.command.Command;
@@ -37,9 +38,9 @@ import org.openstreetmap.josm.command.DeleteCommand;
 import org.openstreetmap.josm.command.MoveCommand;
 import org.openstreetmap.josm.command.SequenceCommand;
 import org.openstreetmap.josm.data.Bounds;
-import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.Preferences.PreferenceChangeEvent;
 import org.openstreetmap.josm.data.Preferences.PreferenceChangedListener;
+import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
 import org.openstreetmap.josm.data.osm.DataSet;
@@ -55,14 +56,12 @@ import org.openstreetmap.josm.gui.layer.Layer;
 import org.openstreetmap.josm.gui.layer.MapViewPaintable;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.gui.util.GuiHelper;
-import org.openstreetmap.josm.gui.util.ModifierListener;
 import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
+import org.openstreetmap.josm.gui.util.ModifierListener;
+import org.openstreetmap.josm.tools.Geometry;
 import org.openstreetmap.josm.tools.ImageProvider;
 import org.openstreetmap.josm.tools.Pair;
 import org.openstreetmap.josm.tools.Shortcut;
-import org.openstreetmap.josm.actions.ExpertToggleAction;
-import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
-import org.openstreetmap.josm.tools.Geometry;
 
 /**
  * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
@@ -213,8 +212,10 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         distanceColor = new ColorProperty(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120)).get();
         arcFillColor = new ColorProperty(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50)).get();
         arcStrokeColor = new ColorProperty(marktr("improve way accuracy helper arc stroke"), new Color(240, 240, 240, 150)).get();
-        perpendicularLineColor = new ColorProperty(marktr("improve way accuracy helper perpendicular line"), new Color(240, 240, 240, 150)).get();
-        equalAngleCircleColor = new ColorProperty(marktr("improve way accuracy helper equal angle circle"), new Color(240, 240, 240, 150)).get();
+        perpendicularLineColor = new ColorProperty(marktr("improve way accuracy helper perpendicular line"), 
+                new Color(240, 240, 240, 150)).get();
+        equalAngleCircleColor = new ColorProperty(marktr("improve way accuracy helper equal angle circle"), 
+                new Color(240, 240, 240, 150)).get();
 
         selectTargetWayStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.select-target", "2"));
         moveNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.move-node", "1 6"));
@@ -334,7 +335,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 g.setStroke(addNodeStroke);
                 p1 = mv.getPoint(candidateSegment.getFirstNode());
                 p2 = mv.getPoint(candidateSegment.getSecondNode());
-            } else if (!(alt^ctrl) && candidateNode != null) {
+            } else if (!(alt ^ ctrl) && candidateNode != null) {
                 g.setStroke(moveNodeStroke);
                 List<Pair<Node, Node>> wpps = targetWay.getNodePairs(false);
                 for (Pair<Node, Node> wpp : wpps) {
@@ -431,14 +432,13 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             double radius, lastradius = 0;
             double turn;
             Arc2D arc;
-            Ellipse2D circle;
             double arcRadius;
             boolean candidateSegmentVisited = false;
             int nodeCounter = 0;
             int nodesCount = targetWay.getNodesCount();
             int endLoop = nodesCount;
             if (targetWay.isClosed()) endLoop++;
-            for (int i=0; i<endLoop; i++) {
+            for (int i = 0; i < endLoop; i++) {
                 // when way is closed we visit second node again
                 // to get turn for start/end node
                 node = targetWay.getNode(i == nodesCount ? 1 : i);
@@ -461,11 +461,11 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                     coor = node.getCoor();
                     point = mv.getPoint(coor);
                 }
-                if (nodeCounter>=1) {
+                if (nodeCounter >= 1) {
                     heading = fixHeading(-90-lastcoor.heading(coor)*180/Math.PI);
                     distance = lastcoor.greatCircleDistance(coor);
                     radius = point.distance(lastpoint);
-                    if (nodeCounter>=2) {
+                    if (nodeCounter >= 2) {
                         turn = Math.abs(fixHeading(heading-lastheading));
                         double fixedHeading = fixHeading(heading - lastheading);
                         g.setColor(turnColor);
@@ -536,10 +536,10 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     // returns node index for closed ways using possibly under/overflowed index
     // returns -1 if not closed and out of range
     private int fixIndex(int count, boolean closed, int index) {
-        if (index>=0 && index<count) return index;
+        if (index >= 0 && index < count) return index;
         if (!closed) return -1;
-        while (index<0) index += count;
-        while (index>=count) index -= count;
+        while (index < 0) index += count;
+        while (index >= count) index -= count;
         return index;
     }
 
@@ -583,7 +583,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         int index2 = -1;
         int realNodesCount = targetWay.getRealNodesCount();
 
-        for (int i=0; i<realNodesCount; i++) {
+        for (int i = 0; i < realNodesCount; i++) {
             Node node = targetWay.getNode(i);
             if (node == candidateNode) {
                 index1 = i-1;
@@ -599,7 +599,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         int i12 = fixIndex(realNodesCount, targetWay.isClosed(), index1);
         int i21 = fixIndex(realNodesCount, targetWay.isClosed(), index2);
         int i22 = fixIndex(realNodesCount, targetWay.isClosed(), index2+1);
-        if (i11<0 || i12<0 || i21<0 || i22<0) return null;
+        if (i11 < 0 || i12 < 0 || i21 < 0 || i22 < 0) return null;
 
         EastNorth p11 = targetWay.getNode(i11).getEastNorth();
         EastNorth p12 = targetWay.getNode(i12).getEastNorth();
@@ -968,7 +968,9 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             try {
                 longKeypressTimer.cancel();
                 longKeypressTimer.purge();
-            } catch (IllegalStateException exception) {}
+            } catch (IllegalStateException exception) {
+                Main.debug(exception);
+            }
         }
         longKeypressTimer = new Timer();
     }
@@ -980,7 +982,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             Main.map.mapView.repaint();
             return;
         }
-        if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e))return;
+        if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
         if (!isExpert) return;
         keypressTime = System.currentTimeMillis();
         helpersEnabledBeforeKeypressed = helpersEnabled;

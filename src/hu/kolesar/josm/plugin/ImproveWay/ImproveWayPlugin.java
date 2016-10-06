@@ -2,12 +2,10 @@
 package hu.kolesar.josm.plugin.ImproveWay;
 
 import org.openstreetmap.josm.Main;
-import org.openstreetmap.josm.gui.MainMenu;
-import org.openstreetmap.josm.gui.preferences.PreferenceSetting;
-import org.openstreetmap.josm.plugins.Plugin;
-import org.openstreetmap.josm.plugins.PluginInformation;
 import org.openstreetmap.josm.gui.IconToggleButton;
 import org.openstreetmap.josm.gui.MapFrame;
+import org.openstreetmap.josm.plugins.Plugin;
+import org.openstreetmap.josm.plugins.PluginInformation;
 
 public class ImproveWayPlugin extends Plugin {
 
