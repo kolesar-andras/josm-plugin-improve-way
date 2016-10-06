@@ -9,7 +9,7 @@
          See https://josm.openstreetmap.de/wiki/DevelopersGuide/DevelopingPlugins
     -->
     <property name="plugin.author" value="Kolesár András &lt;kolesar@openstreetmap.hu&gt;"/>
-    <property name="plugin.class" value="hu.kolesar.josm.plugin.ImproveWay.ImproveWayPlugin"/>
+    <property name="plugin.class" value="org.openstreetmap.josm.plugins.improveway.ImproveWayPlugin"/>
     <property name="plugin.description" value="Extends ImproveWayAccuracy mode with helpers to place nodes at accurate distances and angles."/>
     <property name="plugin.icon" value="images/mapmode/improveway.png"/>
     <property name="plugin.link" value="https://wiki.openstreetmap.org/wiki/JOSM/Plugins/ImproveWay"/>
