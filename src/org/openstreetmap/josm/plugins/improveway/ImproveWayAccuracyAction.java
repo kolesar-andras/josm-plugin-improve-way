@@ -48,7 +48,6 @@ import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.WaySegment;
-import org.openstreetmap.josm.data.osm.visitor.paint.PaintColors;
 import org.openstreetmap.josm.data.preferences.ColorProperty;
 import org.openstreetmap.josm.gui.MapFrame;
 import org.openstreetmap.josm.gui.MapView;
@@ -205,9 +204,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     @Override
     protected void readPreferences() {
-        guideColor = new ColorProperty(marktr("improve way accuracy helper line"), (Color) null).get();
-        if (guideColor == null) guideColor = PaintColors.HIGHLIGHT.get();
-
+        guideColor = new ColorProperty(marktr("improve way accuracy helper line"), Color.RED).get();
         turnColor = new ColorProperty(marktr("improve way accuracy helper turn angle text"), new Color(240, 240, 240, 200)).get();
         distanceColor = new ColorProperty(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120)).get();
         arcFillColor = new ColorProperty(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50)).get();
