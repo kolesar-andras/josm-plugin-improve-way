@@ -38,8 +38,6 @@ import org.openstreetmap.josm.command.DeleteCommand;
 import org.openstreetmap.josm.command.MoveCommand;
 import org.openstreetmap.josm.command.SequenceCommand;
 import org.openstreetmap.josm.data.Bounds;
-import org.openstreetmap.josm.data.Preferences.PreferenceChangeEvent;
-import org.openstreetmap.josm.data.Preferences.PreferenceChangedListener;
 import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
@@ -49,6 +47,7 @@ import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.WaySegment;
 import org.openstreetmap.josm.data.preferences.ColorProperty;
+import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapFrame;
 import org.openstreetmap.josm.gui.MapView;
 import org.openstreetmap.josm.gui.layer.Layer;
@@ -56,9 +55,12 @@ import org.openstreetmap.josm.gui.layer.MapViewPaintable;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
-import org.openstreetmap.josm.gui.util.ModifierListener;
+import org.openstreetmap.josm.gui.util.ModifierExListener;
+import org.openstreetmap.josm.spi.preferences.PreferenceChangeEvent;
+import org.openstreetmap.josm.spi.preferences.PreferenceChangedListener;
 import org.openstreetmap.josm.tools.Geometry;
 import org.openstreetmap.josm.tools.ImageProvider;
+import org.openstreetmap.josm.tools.Logging;
 import org.openstreetmap.josm.tools.Pair;
 import org.openstreetmap.josm.tools.Shortcut;
 
@@ -66,7 +68,7 @@ import org.openstreetmap.josm.tools.Shortcut;
  * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
  */
 public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintable,
-        SelectionChangedListener, ModifierListener, KeyPressReleaseListener,
+        SelectionChangedListener, ModifierExListener, KeyPressReleaseListener,
         ExpertModeChangeListener, PreferenceChangedListener {
 
     enum State {
@@ -142,7 +144,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 tr("Improve Way mode"),
                 Shortcut.registerShortcut("mapmode:ImproveWay",
                 tr("Mode: {0}", tr("Improve Way")),
-                KeyEvent.VK_W, Shortcut.DIRECT), mapFrame, Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+                KeyEvent.VK_W, Shortcut.DIRECT), Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
 
         helpersShortcut = Shortcut.registerShortcut("mapmode:enablewayaccuracyhelpers",
                 tr("Mode: Enable way accuracy helpers"), KeyEvent.CHAR_UNDEFINED, Shortcut.NONE);
@@ -170,7 +172,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         }
         super.enterMode();
 
-        mv = Main.map.mapView;
+        MapFrame map = MainApplication.getMap();
+        mv = map.mapView;
         mousePos = null;
         oldModeHelpText = "";
 
@@ -180,13 +183,13 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         updateStateByCurrentSelection();
 
-        Main.map.keyDetector.addKeyListener(this);
-        Main.map.mapView.addMouseListener(this);
-        Main.map.mapView.addMouseMotionListener(this);
-        Main.map.mapView.addTemporaryLayer(this);
+        map.keyDetector.addKeyListener(this);
+        map.mapView.addMouseListener(this);
+        map.mapView.addMouseMotionListener(this);
+        map.mapView.addTemporaryLayer(this);
         DataSet.addSelectionListener(this);
 
-        Main.map.keyDetector.addModifierListener(this);
+        map.keyDetector.addModifierExListener(this);
 
         if (!isExpert) return;
         helpersEnabled = false;
@@ -197,7 +200,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             public void run() {
                 helpersEnabled = true;
                 helpersUseOriginal = true;
-                Main.map.mapView.repaint();
+                MainApplication.getMap().mapView.repaint();
             }
         }, longKeypressTime);
     }
@@ -223,27 +226,27 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         perpendicularLineStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-perpendicular-line", "1 6"));
         equalAngleCircleStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-eual-angle-circle", "1"));
 
-        dotSize = Main.pref.getInteger("improvewayaccuracy.dot-size", 6);
-        arcRadiusPixels = Main.pref.getInteger("improvewayaccuracy.helper-arc-radius", 200);
-        perpendicularLengthPixels = Main.pref.getInteger("improvewayaccuracy.helper-perpendicular-line-length", 100);
-        turnTextDistance = Main.pref.getInteger("improvewayaccuracy.helper-turn-text-distance", 15);
-        distanceTextDistance = Main.pref.getInteger("improvewayaccuracy.helper-distance-text-distance", 15);
-        equalAngleCircleRadius = Main.pref.getInteger("improvewayaccuracy.helper-equal-angle-circle-radius", 15);
-        longKeypressTime = Main.pref.getInteger("improvewayaccuracy.long-keypress-time", 250);
+        dotSize = Main.pref.getInt("improvewayaccuracy.dot-size", 6);
+        arcRadiusPixels = Main.pref.getInt("improvewayaccuracy.helper-arc-radius", 200);
+        perpendicularLengthPixels = Main.pref.getInt("improvewayaccuracy.helper-perpendicular-line-length", 100);
+        turnTextDistance = Main.pref.getInt("improvewayaccuracy.helper-turn-text-distance", 15);
+        distanceTextDistance = Main.pref.getInt("improvewayaccuracy.helper-distance-text-distance", 15);
+        equalAngleCircleRadius = Main.pref.getInt("improvewayaccuracy.helper-equal-angle-circle-radius", 15);
+        longKeypressTime = Main.pref.getInt("improvewayaccuracy.long-keypress-time", 250);
     }
 
     @Override
     public void exitMode() {
         super.exitMode();
 
-        Main.map.keyDetector.removeKeyListener(this);
-        Main.map.mapView.removeMouseListener(this);
-        Main.map.mapView.removeMouseMotionListener(this);
-        Main.map.mapView.removeTemporaryLayer(this);
+        MainApplication.getMap().keyDetector.removeKeyListener(this);
+        MainApplication.getMap().mapView.removeMouseListener(this);
+        MainApplication.getMap().mapView.removeMouseMotionListener(this);
+        MainApplication.getMap().mapView.removeTemporaryLayer(this);
         DataSet.removeSelectionListener(this);
 
-        Main.map.keyDetector.removeModifierListener(this);
-        Main.map.mapView.repaint();
+        MainApplication.getMap().keyDetector.removeModifierExListener(this);
+        MainApplication.getMap().mapView.repaint();
     }
 
     @Override
@@ -251,8 +254,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         String newModeHelpText = getModeHelpText();
         if (!newModeHelpText.equals(oldModeHelpText)) {
             oldModeHelpText = newModeHelpText;
-            Main.map.statusLine.setHelpText(newModeHelpText);
-            Main.map.statusLine.repaint();
+            MainApplication.getMap().statusLine.setHelpText(newModeHelpText);
+            MainApplication.getMap().statusLine.repaint();
         }
     }
 
@@ -641,15 +644,15 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     // Event handlers
     // -------------------------------------------------------------------------
     @Override
-    public void modifiersChanged(int modifiers) {
-        if (!Main.isDisplayingMapView() || !Main.map.mapView.isActiveLayerDrawable()) {
+    public void modifiersExChanged(int modifiers) {
+        if (!MainApplication.isDisplayingMapView() || !MainApplication.getMap().mapView.isActiveLayerDrawable()) {
             return;
         }
-        updateKeyModifiers(modifiers);
+        updateKeyModifiersEx(modifiers);
         updateCursorDependentObjectsIfNeeded();
         updateCursor();
         updateStatusLine();
-        Main.map.mapView.repaint();
+        MainApplication.getMap().mapView.repaint();
     }
 
     @Override
@@ -678,7 +681,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         updateCursorDependentObjectsIfNeeded();
         updateCursor();
         updateStatusLine();
-        Main.map.mapView.repaint();
+        MainApplication.getMap().mapView.repaint();
     }
 
     @Override
@@ -716,7 +719,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 Node virtualNode = new Node(
                     Main.getProjection().eastNorth2latlon(newPointEN)
                 );
-                virtualCmds.add(new AddCommand(virtualNode));
+                virtualCmds.add(new AddCommand(getLayerManager().getEditDataSet(), virtualNode));
 
                 // Looking for candidateSegment copies in ways that are
                 // referenced
@@ -786,7 +789,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 } else {
                     List<Node> nodeList = new ArrayList<>();
                     nodeList.add(candidateNode);
-                    Command deleteCmd = DeleteCommand.delete(getLayerManager().getEditLayer(), nodeList, true);
+                    Command deleteCmd = DeleteCommand.delete(nodeList, true);
                     if (deleteCmd != null) {
                         Main.main.undoRedo.add(deleteCmd);
                     }
@@ -807,7 +810,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         updateCursor();
         updateStatusLine();
-        Main.map.mapView.repaint();
+        MainApplication.getMap().mapView.repaint();
     }
 
     @Override
@@ -819,7 +822,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         if (!dragging) {
             mousePos = null;
         }
-        Main.map.mapView.repaint();
+        MainApplication.getMap().mapView.repaint();
     }
 
     // -------------------------------------------------------------------------
@@ -966,7 +969,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 longKeypressTimer.cancel();
                 longKeypressTimer.purge();
             } catch (IllegalStateException exception) {
-                Main.debug(exception);
+                Logging.debug(exception);
             }
         }
         longKeypressTimer = new Timer();
@@ -976,7 +979,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     public void doKeyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
             mod4 = true;
-            Main.map.mapView.repaint();
+            MainApplication.getMap().mapView.repaint();
             return;
         }
         if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
@@ -985,14 +988,14 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         helpersEnabledBeforeKeypressed = helpersEnabled;
         if (!helpersEnabled) helpersEnabled = true;
         helpersUseOriginal = true;
-        Main.map.mapView.repaint();
+        MainApplication.getMap().mapView.repaint();
     }
 
     @Override
     public void doKeyReleased(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
             mod4 = false;
-            Main.map.mapView.repaint();
+            MainApplication.getMap().mapView.repaint();
             return;
         }
         if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
@@ -1007,7 +1010,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             helpersEnabled = !helpersEnabledBeforeKeypressed;
         }
         helpersUseOriginal = false;
-        Main.map.mapView.repaint();
+        MainApplication.getMap().mapView.repaint();
     }
 
     @Override
@@ -1015,7 +1018,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         this.isExpert = isExpert;
         if (!isExpert && helpersEnabled) {
             helpersEnabled = false;
-            Main.map.mapView.repaint();
+            MainApplication.getMap().mapView.repaint();
         }
     }
 
@@ -1025,7 +1028,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         if (e.getKey().startsWith("improvewayaccuracy") ||
             e.getKey().startsWith("color.improve.way.accuracy")) {
             readPreferences();
-            Main.map.mapView.repaint();
+            MainApplication.getMap().mapView.repaint();
         }
     }
 }
