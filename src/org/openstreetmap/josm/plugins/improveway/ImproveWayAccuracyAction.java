@@ -46,7 +46,7 @@ import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.WaySegment;
-import org.openstreetmap.josm.data.preferences.ColorProperty;
+import org.openstreetmap.josm.data.preferences.NamedColorProperty;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapFrame;
 import org.openstreetmap.josm.gui.MapView;
@@ -207,14 +207,14 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     @Override
     protected void readPreferences() {
-        guideColor = new ColorProperty(marktr("improve way accuracy helper line"), Color.RED).get();
-        turnColor = new ColorProperty(marktr("improve way accuracy helper turn angle text"), new Color(240, 240, 240, 200)).get();
-        distanceColor = new ColorProperty(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120)).get();
-        arcFillColor = new ColorProperty(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50)).get();
-        arcStrokeColor = new ColorProperty(marktr("improve way accuracy helper arc stroke"), new Color(240, 240, 240, 150)).get();
-        perpendicularLineColor = new ColorProperty(marktr("improve way accuracy helper perpendicular line"), 
+        guideColor = new NamedColorProperty(marktr("improve way accuracy helper line"), Color.RED).get();
+        turnColor = new NamedColorProperty(marktr("improve way accuracy helper turn angle text"), new Color(240, 240, 240, 200)).get();
+        distanceColor = new NamedColorProperty(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120)).get();
+        arcFillColor = new NamedColorProperty(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50)).get();
+        arcStrokeColor = new NamedColorProperty(marktr("improve way accuracy helper arc stroke"), new Color(240, 240, 240, 150)).get();
+        perpendicularLineColor = new NamedColorProperty(marktr("improve way accuracy helper perpendicular line"), 
                 new Color(240, 240, 240, 150)).get();
-        equalAngleCircleColor = new ColorProperty(marktr("improve way accuracy helper equal angle circle"), 
+        equalAngleCircleColor = new NamedColorProperty(marktr("improve way accuracy helper equal angle circle"), 
                 new Color(240, 240, 240, 150)).get();
 
         selectTargetWayStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.select-target", "2"));
