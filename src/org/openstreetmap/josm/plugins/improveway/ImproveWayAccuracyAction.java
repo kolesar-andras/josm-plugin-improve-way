@@ -57,7 +57,6 @@ import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
 import org.openstreetmap.josm.gui.util.ModifierExListener;
 import org.openstreetmap.josm.spi.preferences.PreferenceChangeEvent;
-import org.openstreetmap.josm.spi.preferences.PreferenceChangedListener;
 import org.openstreetmap.josm.tools.Geometry;
 import org.openstreetmap.josm.tools.ImageProvider;
 import org.openstreetmap.josm.tools.Logging;
@@ -69,7 +68,7 @@ import org.openstreetmap.josm.tools.Shortcut;
  */
 public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintable,
         SelectionChangedListener, ModifierExListener, KeyPressReleaseListener,
-        ExpertModeChangeListener, PreferenceChangedListener {
+        ExpertModeChangeListener {
 
     enum State {
         selecting, improving
@@ -137,9 +136,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     /**
      * Constructs a new {@code ImproveWayAccuracyAction}.
-     * @param mapFrame Map frame
      */
-    public ImproveWayAccuracyAction(MapFrame mapFrame) {
+    public ImproveWayAccuracyAction() {
         super(tr("Improve Way"), "improveway",
                 tr("Improve Way mode"),
                 Shortcut.registerShortcut("mapmode:ImproveWay",
@@ -158,7 +156,6 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 "add_node_lock");
         cursorImproveLock = ImageProvider.getCursor("crosshair", "lock");
         ExpertToggleAction.addExpertModeChangeListener(this, true);
-        Main.pref.addPreferenceChangeListener(this);
         readPreferences();
     }
 
@@ -200,7 +197,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             public void run() {
                 helpersEnabled = true;
                 helpersUseOriginal = true;
-                MainApplication.getMap().mapView.repaint();
+                MainApplication.getLayerManager().invalidateEditLayer();
             }
         }, longKeypressTime);
     }
@@ -246,7 +243,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         DataSet.removeSelectionListener(this);
 
         MainApplication.getMap().keyDetector.removeModifierExListener(this);
-        MainApplication.getMap().mapView.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
     }
 
     @Override
@@ -652,7 +649,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         updateCursorDependentObjectsIfNeeded();
         updateCursor();
         updateStatusLine();
-        MainApplication.getMap().mapView.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
     }
 
     @Override
@@ -681,7 +678,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         updateCursorDependentObjectsIfNeeded();
         updateCursor();
         updateStatusLine();
-        MainApplication.getMap().mapView.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
     }
 
     @Override
@@ -810,7 +807,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         updateCursor();
         updateStatusLine();
-        MainApplication.getMap().mapView.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
     }
 
     @Override
@@ -822,7 +819,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         if (!dragging) {
             mousePos = null;
         }
-        MainApplication.getMap().mapView.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
     }
 
     // -------------------------------------------------------------------------
@@ -896,7 +893,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
         targetWay = null;
 
-        mv.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
         updateStatusLine();
     }
 
@@ -921,7 +918,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         this.candidateNode = null;
         this.candidateSegment = null;
 
-        mv.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
         updateStatusLine();
     }
 
@@ -979,7 +976,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     public void doKeyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
             mod4 = true;
-            MainApplication.getMap().mapView.repaint();
+            MainApplication.getLayerManager().invalidateEditLayer();
             return;
         }
         if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
@@ -988,14 +985,14 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         helpersEnabledBeforeKeypressed = helpersEnabled;
         if (!helpersEnabled) helpersEnabled = true;
         helpersUseOriginal = true;
-        MainApplication.getMap().mapView.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
     }
 
     @Override
     public void doKeyReleased(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
             mod4 = false;
-            MainApplication.getMap().mapView.repaint();
+            MainApplication.getLayerManager().invalidateEditLayer();
             return;
         }
         if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
@@ -1010,7 +1007,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             helpersEnabled = !helpersEnabledBeforeKeypressed;
         }
         helpersUseOriginal = false;
-        MainApplication.getMap().mapView.repaint();
+        MainApplication.getLayerManager().invalidateEditLayer();
     }
 
     @Override
@@ -1018,17 +1015,15 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         this.isExpert = isExpert;
         if (!isExpert && helpersEnabled) {
             helpersEnabled = false;
-            MainApplication.getMap().mapView.repaint();
+            MainApplication.getLayerManager().invalidateEditLayer();
         }
     }
 
     @Override
     public void preferenceChanged(PreferenceChangeEvent e) {
-        if (!isEnabled()) return;
-        if (e.getKey().startsWith("improvewayaccuracy") ||
-            e.getKey().startsWith("color.improve.way.accuracy")) {
-            readPreferences();
-            MainApplication.getMap().mapView.repaint();
+        super.preferenceChanged(e);
+        if (isEnabled() && (e.getKey().startsWith("improvewayaccuracy") || e.getKey().startsWith("color.improve.way.accuracy"))) {
+            MainApplication.getLayerManager().invalidateEditLayer();
         }
     }
 }
