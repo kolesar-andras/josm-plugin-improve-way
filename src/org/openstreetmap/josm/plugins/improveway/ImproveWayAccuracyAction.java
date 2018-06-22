@@ -38,14 +38,14 @@ import org.openstreetmap.josm.command.DeleteCommand;
 import org.openstreetmap.josm.command.MoveCommand;
 import org.openstreetmap.josm.command.SequenceCommand;
 import org.openstreetmap.josm.data.Bounds;
-import org.openstreetmap.josm.data.SelectionChangedListener;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
-import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.DataSelectionListener;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.WaySegment;
+import org.openstreetmap.josm.data.osm.event.SelectionEventManager;
 import org.openstreetmap.josm.data.preferences.NamedColorProperty;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapFrame;
@@ -67,7 +67,7 @@ import org.openstreetmap.josm.tools.Shortcut;
  * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
  */
 public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintable,
-        SelectionChangedListener, ModifierExListener, KeyPressReleaseListener,
+        DataSelectionListener, ModifierExListener, KeyPressReleaseListener,
         ExpertModeChangeListener {
 
     enum State {
@@ -184,7 +184,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         map.mapView.addMouseListener(this);
         map.mapView.addMouseMotionListener(this);
         map.mapView.addTemporaryLayer(this);
-        DataSet.addSelectionListener(this);
+        SelectionEventManager.getInstance().addSelectionListener(this);
 
         map.keyDetector.addModifierExListener(this);
 
@@ -240,7 +240,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         MainApplication.getMap().mapView.removeMouseListener(this);
         MainApplication.getMap().mapView.removeMouseMotionListener(this);
         MainApplication.getMap().mapView.removeTemporaryLayer(this);
-        DataSet.removeSelectionListener(this);
+        SelectionEventManager.getInstance().removeSelectionListener(this);
 
         MainApplication.getMap().keyDetector.removeModifierExListener(this);
         MainApplication.getLayerManager().invalidateEditLayer();
@@ -459,7 +459,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                     point = mv.getPoint(coor);
                 }
                 if (nodeCounter >= 1) {
-                    heading = fixHeading(-90-lastcoor.heading(coor)*180/Math.PI);
+                    heading = fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
                     distance = lastcoor.greatCircleDistance(coor);
                     radius = point.distance(lastpoint);
                     if (nodeCounter >= 2) {
@@ -653,7 +653,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     }
 
     @Override
-    public void selectionChanged(Collection<? extends OsmPrimitive> newSelection) {
+    public void selectionChanged(SelectionChangeEvent event) {
         if (selectionChangedBlocked) {
             return;
         }
