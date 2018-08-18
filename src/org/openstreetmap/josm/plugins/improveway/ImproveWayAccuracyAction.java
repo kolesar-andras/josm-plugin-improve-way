@@ -27,7 +27,6 @@ import java.util.TimerTask;
 
 import javax.swing.JOptionPane;
 
-import org.openstreetmap.josm.Main;
 import org.openstreetmap.josm.actions.ExpertToggleAction;
 import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
 import org.openstreetmap.josm.actions.mapmode.MapMode;
@@ -38,6 +37,7 @@ import org.openstreetmap.josm.command.DeleteCommand;
 import org.openstreetmap.josm.command.MoveCommand;
 import org.openstreetmap.josm.command.SequenceCommand;
 import org.openstreetmap.josm.data.Bounds;
+import org.openstreetmap.josm.data.UndoRedoHandler;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
 import org.openstreetmap.josm.data.osm.DataSelectionListener;
@@ -47,6 +47,7 @@ import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.osm.WaySegment;
 import org.openstreetmap.josm.data.osm.event.SelectionEventManager;
 import org.openstreetmap.josm.data.preferences.NamedColorProperty;
+import org.openstreetmap.josm.data.projection.ProjectionRegistry;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapFrame;
 import org.openstreetmap.josm.gui.MapView;
@@ -56,6 +57,7 @@ import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
 import org.openstreetmap.josm.gui.util.ModifierExListener;
+import org.openstreetmap.josm.spi.preferences.Config;
 import org.openstreetmap.josm.spi.preferences.PreferenceChangeEvent;
 import org.openstreetmap.josm.tools.Geometry;
 import org.openstreetmap.josm.tools.ImageProvider;
@@ -214,22 +216,22 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         equalAngleCircleColor = new NamedColorProperty(marktr("improve way accuracy helper equal angle circle"), 
                 new Color(240, 240, 240, 150)).get();
 
-        selectTargetWayStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.select-target", "2"));
-        moveNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.move-node", "1 6"));
-        moveNodeIntersectingStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.move-node-intersecting", "1 2 6"));
-        addNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.add-node", "1"));
-        deleteNodeStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.delete-node", "1"));
-        arcStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-arc", "1"));
-        perpendicularLineStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-perpendicular-line", "1 6"));
-        equalAngleCircleStroke = GuiHelper.getCustomizedStroke(Main.pref.get("improvewayaccuracy.stroke.helper-eual-angle-circle", "1"));
+        selectTargetWayStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.select-target", "2"));
+        moveNodeStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.move-node", "1 6"));
+        moveNodeIntersectingStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.move-node-intersecting", "1 2 6"));
+        addNodeStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.add-node", "1"));
+        deleteNodeStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.delete-node", "1"));
+        arcStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.helper-arc", "1"));
+        perpendicularLineStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.helper-perpendicular-line", "1 6"));
+        equalAngleCircleStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.helper-eual-angle-circle", "1"));
 
-        dotSize = Main.pref.getInt("improvewayaccuracy.dot-size", 6);
-        arcRadiusPixels = Main.pref.getInt("improvewayaccuracy.helper-arc-radius", 200);
-        perpendicularLengthPixels = Main.pref.getInt("improvewayaccuracy.helper-perpendicular-line-length", 100);
-        turnTextDistance = Main.pref.getInt("improvewayaccuracy.helper-turn-text-distance", 15);
-        distanceTextDistance = Main.pref.getInt("improvewayaccuracy.helper-distance-text-distance", 15);
-        equalAngleCircleRadius = Main.pref.getInt("improvewayaccuracy.helper-equal-angle-circle-radius", 15);
-        longKeypressTime = Main.pref.getInt("improvewayaccuracy.long-keypress-time", 250);
+        dotSize = Config.getPref().getInt("improvewayaccuracy.dot-size", 6);
+        arcRadiusPixels = Config.getPref().getInt("improvewayaccuracy.helper-arc-radius", 200);
+        perpendicularLengthPixels = Config.getPref().getInt("improvewayaccuracy.helper-perpendicular-line-length", 100);
+        turnTextDistance = Config.getPref().getInt("improvewayaccuracy.helper-turn-text-distance", 15);
+        distanceTextDistance = Config.getPref().getInt("improvewayaccuracy.helper-distance-text-distance", 15);
+        equalAngleCircleRadius = Config.getPref().getInt("improvewayaccuracy.helper-equal-angle-circle-radius", 15);
+        longKeypressTime = Config.getPref().getInt("improvewayaccuracy.long-keypress-time", 250);
     }
 
     @Override
@@ -445,12 +447,12 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                     candidateSegment != null &&
                     candidateSegment.getSecondNode() == node
                 ) {
-                    coor = Main.getProjection().eastNorth2latlon(newPointEN);
+                    coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
                     point = newPoint;
                     candidateSegmentVisited = true;
                     i--;
                 } else if (!helpersUseOriginal && newPointEN != null && !alt && !ctrl && node == candidateNode) {
-                    coor = Main.getProjection().eastNorth2latlon(newPointEN);
+                    coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
                     point = newPoint;
                 } else if (!helpersUseOriginal && alt && !ctrl && node == candidateNode) {
                     continue;
@@ -699,8 +701,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             }
         } else if (state == State.improving && newPointEN != null) {
             // Checking if the new coordinate is outside of the world
-            if (Main.getProjection().eastNorth2latlon(newPointEN).isOutSideWorld()) {
-                JOptionPane.showMessageDialog(Main.parent,
+            if (ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN).isOutSideWorld()) {
+                JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
                         tr("Cannot add a node outside of the world."),
                         tr("Warning"), JOptionPane.WARNING_MESSAGE);
                 return;
@@ -714,7 +716,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
                 // Creating a new node
                 Node virtualNode = new Node(
-                    Main.getProjection().eastNorth2latlon(newPointEN)
+                    ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN)
                 );
                 virtualCmds.add(new AddCommand(getLayerManager().getEditDataSet(), virtualNode));
 
@@ -764,7 +766,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                         "Add a new node to {0} ways",
                         virtualSegments.size(), virtualSegments.size());
 
-                Main.main.undoRedo.add(new SequenceCommand(text, virtualCmds));
+                UndoRedoHandler.getInstance().add(new SequenceCommand(text, virtualCmds));
 
             } else if (alt && !ctrl && candidateNode != null) {
                 // Deleting the highlighted node
@@ -778,9 +780,9 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                     final List<Node> nodes = newWay.getNodes();
                     nodes.remove(candidateNode);
                     newWay.setNodes(nodes);
-                    Main.main.undoRedo.add(new ChangeCommand(targetWay, newWay));
+                    UndoRedoHandler.getInstance().add(new ChangeCommand(targetWay, newWay));
                 } else if (candidateNode.isTagged()) {
-                    JOptionPane.showMessageDialog(Main.parent,
+                    JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
                             tr("Cannot delete node that has tags"),
                             tr("Error"), JOptionPane.ERROR_MESSAGE);
                 } else {
@@ -788,7 +790,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                     nodeList.add(candidateNode);
                     Command deleteCmd = DeleteCommand.delete(nodeList, true);
                     if (deleteCmd != null) {
-                        Main.main.undoRedo.add(deleteCmd);
+                        UndoRedoHandler.getInstance().add(deleteCmd);
                     }
                 }
 
@@ -798,7 +800,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 EastNorth nodeEN = candidateNode.getEastNorth();
 
                 Node saveCandidateNode = candidateNode;
-                Main.main.undoRedo.add(new MoveCommand(candidateNode, newPointEN.east() - nodeEN.east(), newPointEN.north()
+                UndoRedoHandler.getInstance().add(new MoveCommand(candidateNode, newPointEN.east() - nodeEN.east(), newPointEN.north()
                         - nodeEN.north()));
                 candidateNode = saveCandidateNode;
 
