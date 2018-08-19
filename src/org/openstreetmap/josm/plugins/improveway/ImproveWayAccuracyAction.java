@@ -354,7 +354,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 int index = nodes.indexOf(candidateNode);
 
                 // Only draw line if node is not first and/or last
-                if (index != 0 && index != (nodes.size() - 1)) {
+                if (index > 0 && index < (nodes.size() - 1)) {
                     p1 = mv.getPoint(nodes.get(index - 1));
                     p2 = mv.getPoint(nodes.get(index + 1));
                 }
