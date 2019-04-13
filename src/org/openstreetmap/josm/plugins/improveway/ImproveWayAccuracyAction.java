@@ -64,6 +64,7 @@ import org.openstreetmap.josm.tools.ImageProvider;
 import org.openstreetmap.josm.tools.Logging;
 import org.openstreetmap.josm.tools.Pair;
 import org.openstreetmap.josm.tools.Shortcut;
+import org.openstreetmap.josm.tools.Utils;
 
 /**
  * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
@@ -723,12 +724,12 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 // Looking for candidateSegment copies in ways that are
                 // referenced
                 // by candidateSegment nodes
-                List<Way> firstNodeWays = OsmPrimitive.getFilteredList(
+                List<Way> firstNodeWays = new ArrayList<>(Utils.filteredCollection(
                         candidateSegment.getFirstNode().getReferrers(),
-                        Way.class);
-                List<Way> secondNodeWays = OsmPrimitive.getFilteredList(
+                        Way.class));
+                List<Way> secondNodeWays = new ArrayList<>(Utils.filteredCollection(
                         candidateSegment.getFirstNode().getReferrers(),
-                        Way.class);
+                        Way.class));
 
                 Collection<WaySegment> virtualSegments = new LinkedList<>();
                 for (Way w : firstNodeWays) {
@@ -773,7 +774,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
                 //check to see if node is in use by more than one object
                 List<OsmPrimitive> referrers = candidateNode.getReferrers();
-                List<Way> ways = OsmPrimitive.getFilteredList(referrers, Way.class);
+                Collection<Way> ways = Utils.filteredCollection(referrers, Way.class);
                 if (referrers.size() != 1 || ways.size() != 1) {
                     // detach node from way
                     final Way newWay = new Way(targetWay);
