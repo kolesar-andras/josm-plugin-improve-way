@@ -427,9 +427,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             Node node;
             LatLon coor, lastcoor = null;
             Point point, lastpoint = null;
-            double distance, lastdistance = 0;
+            double distance;
             double heading, lastheading = 0;
-            double radius, lastradius = 0;
             double turn;
             Arc2D arc;
             double arcRadius;
@@ -464,7 +463,6 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                 if (nodeCounter >= 1) {
                     heading = fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
                     distance = lastcoor.greatCircleDistance(coor);
-                    radius = point.distance(lastpoint);
                     if (nodeCounter >= 2) {
                         turn = Math.abs(fixHeading(heading-lastheading));
                         double fixedHeading = fixHeading(heading - lastheading);
@@ -508,9 +506,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                         );
                     }
 
-                    lastradius = radius;
                     lastheading = heading;
-                    lastdistance = distance;
                 }
                 lastcoor = coor;
                 lastpoint = point;
@@ -702,7 +698,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             }
         } else if (state == State.improving && newPointEN != null) {
             // Checking if the new coordinate is outside of the world
-            if (ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN).isOutSideWorld()) {
+            if (new Node(newPointEN).isOutSideWorld()) {
                 JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
                         tr("Cannot add a node outside of the world."),
                         tr("Warning"), JOptionPane.WARNING_MESSAGE);
