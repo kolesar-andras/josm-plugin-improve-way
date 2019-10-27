@@ -41,6 +41,7 @@ import org.openstreetmap.josm.data.UndoRedoHandler;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
 import org.openstreetmap.josm.data.osm.DataSelectionListener;
+import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
@@ -930,15 +931,18 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     private void updateStateByCurrentSelection() {
         final List<Node> nodeList = new ArrayList<>();
         final List<Way> wayList = new ArrayList<>();
-        final Collection<OsmPrimitive> sel = getLayerManager().getEditDataSet().getSelected();
+        final DataSet editDataSet = getLayerManager().getEditDataSet();
+        if (editDataSet != null) {
+            final Collection<OsmPrimitive> sel = editDataSet.getSelected();
 
-        // Collecting nodes and ways from the selection
-        for (OsmPrimitive p : sel) {
-            if (p instanceof Way) {
-                wayList.add((Way) p);
-            }
-            if (p instanceof Node) {
-                nodeList.add((Node) p);
+            // Collecting nodes and ways from the selection
+            for (OsmPrimitive p : sel) {
+                if (p instanceof Way) {
+                    wayList.add((Way) p);
+                }
+                if (p instanceof Node) {
+                    nodeList.add((Node) p);
+                }
             }
         }
 
