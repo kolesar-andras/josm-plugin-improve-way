@@ -42,10 +42,10 @@ import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
 import org.openstreetmap.josm.data.osm.DataSelectionListener;
 import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.IWaySegment;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
-import org.openstreetmap.josm.data.osm.WaySegment;
 import org.openstreetmap.josm.data.osm.event.SelectionEventManager;
 import org.openstreetmap.josm.data.preferences.NamedColorProperty;
 import org.openstreetmap.josm.data.projection.ProjectionRegistry;
@@ -86,7 +86,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     private transient Way targetWay;
     private transient Node candidateNode;
-    private transient WaySegment candidateSegment;
+    private transient IWaySegment<Node, Way> candidateSegment;
 
     private Point mousePos;
     private boolean dragging;
@@ -728,7 +728,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                         candidateSegment.getFirstNode().getReferrers(),
                         Way.class));
 
-                Collection<WaySegment> virtualSegments = new LinkedList<>();
+                Collection<IWaySegment<?, Way>> virtualSegments = new LinkedList<>();
                 for (Way w : firstNodeWays) {
                     List<Pair<Node, Node>> wpps = w.getNodePairs(true);
                     for (Way w2 : secondNodeWays) {
@@ -745,17 +745,17 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                             boolean ba = wpp.b.equals(candidateSegment.getFirstNode())
                                     && wpp.a.equals(candidateSegment.getSecondNode());
                             if (ab || ba) {
-                                virtualSegments.add(new WaySegment(w, i));
+                                virtualSegments.add(new IWaySegment<>(w, i));
                             }
                         }
                     }
                 }
 
                 // Adding the node to all segments found
-                for (WaySegment virtualSegment : virtualSegments) {
-                    Way w = virtualSegment.way;
+                for (IWaySegment<?, Way> virtualSegment : virtualSegments) {
+                    Way w = virtualSegment.getWay();
                     Way wnew = new Way(w);
-                    wnew.addNode(virtualSegment.lowerIndex + 1, virtualNode);
+                    wnew.addNode(virtualSegment.getUpperIndex(), virtualNode);
                     virtualCmds.add(new ChangeCommand(w, wnew));
                 }
 
