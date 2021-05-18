@@ -6,10 +6,10 @@ import java.util.Collection;
 import java.util.List;
 
 import org.openstreetmap.josm.data.coor.EastNorth;
+import org.openstreetmap.josm.data.osm.IWaySegment;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
-import org.openstreetmap.josm.data.osm.WaySegment;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapView;
 import org.openstreetmap.josm.tools.Geometry;
@@ -125,7 +125,7 @@ final class ImproveWayAccuracyHelper {
      * @param p the cursor position
      * @return nearest way segment to cursor
      */
-    public static WaySegment findCandidateSegment(MapView mv, Way w, Point p) {
+    public static IWaySegment<Node, Way> findCandidateSegment(MapView mv, Way w, Point p) {
         if (mv == null || w == null || p == null) {
             return null;
         }
@@ -172,6 +172,6 @@ final class ImproveWayAccuracyHelper {
             }
 
         }
-        return candidate != -1 ? new WaySegment(w, candidate) : null;
+        return candidate != -1 ? new IWaySegment<>(w, candidate) : null;
     }
 }
