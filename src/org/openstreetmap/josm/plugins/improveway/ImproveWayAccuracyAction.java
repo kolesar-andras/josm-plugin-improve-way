@@ -1,166 +1,96 @@
 // License: GPL. For details, see LICENSE file.
 package org.openstreetmap.josm.plugins.improveway;
 
-import static org.openstreetmap.josm.tools.I18n.marktr;
-import static org.openstreetmap.josm.tools.I18n.tr;
-import static org.openstreetmap.josm.tools.I18n.trn;
+import org.openstreetmap.josm.actions.ExpertToggleAction;
+import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
+import org.openstreetmap.josm.command.*;
+import org.openstreetmap.josm.data.Bounds;
+import org.openstreetmap.josm.data.UndoRedoHandler;
+import org.openstreetmap.josm.data.coor.EastNorth;
+import org.openstreetmap.josm.data.coor.LatLon;
+import org.openstreetmap.josm.data.osm.IWaySegment;
+import org.openstreetmap.josm.data.osm.Node;
+import org.openstreetmap.josm.data.osm.OsmPrimitive;
+import org.openstreetmap.josm.data.osm.Way;
+import org.openstreetmap.josm.data.preferences.NamedColorProperty;
+import org.openstreetmap.josm.data.projection.ProjectionRegistry;
+import org.openstreetmap.josm.gui.MainApplication;
+import org.openstreetmap.josm.gui.MapView;
+import org.openstreetmap.josm.gui.util.GuiHelper;
+import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
+import org.openstreetmap.josm.spi.preferences.Config;
+import org.openstreetmap.josm.spi.preferences.PreferenceChangeEvent;
+import org.openstreetmap.josm.spi.preferences.PreferenceChangedListener;
+import org.openstreetmap.josm.tools.*;
 
-import java.awt.Color;
-import java.awt.Cursor;
-import java.awt.FontMetrics;
-import java.awt.Graphics2D;
-import java.awt.Point;
-import java.awt.RenderingHints;
-import java.awt.Stroke;
+import javax.swing.*;
+import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.Line2D;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
 
-import javax.swing.JOptionPane;
-
-import org.openstreetmap.josm.actions.ExpertToggleAction;
-import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
-import org.openstreetmap.josm.actions.mapmode.MapMode;
-import org.openstreetmap.josm.command.AddCommand;
-import org.openstreetmap.josm.command.ChangeCommand;
-import org.openstreetmap.josm.command.Command;
-import org.openstreetmap.josm.command.DeleteCommand;
-import org.openstreetmap.josm.command.MoveCommand;
-import org.openstreetmap.josm.command.SequenceCommand;
-import org.openstreetmap.josm.data.Bounds;
-import org.openstreetmap.josm.data.UndoRedoHandler;
-import org.openstreetmap.josm.data.coor.EastNorth;
-import org.openstreetmap.josm.data.coor.LatLon;
-import org.openstreetmap.josm.data.osm.DataSelectionListener;
-import org.openstreetmap.josm.data.osm.DataSet;
-import org.openstreetmap.josm.data.osm.IWaySegment;
-import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
-import org.openstreetmap.josm.data.osm.Way;
-import org.openstreetmap.josm.data.osm.event.SelectionEventManager;
-import org.openstreetmap.josm.data.preferences.NamedColorProperty;
-import org.openstreetmap.josm.data.projection.ProjectionRegistry;
-import org.openstreetmap.josm.gui.MainApplication;
-import org.openstreetmap.josm.gui.MapFrame;
-import org.openstreetmap.josm.gui.MapView;
-import org.openstreetmap.josm.gui.layer.Layer;
-import org.openstreetmap.josm.gui.layer.MapViewPaintable;
-import org.openstreetmap.josm.gui.layer.OsmDataLayer;
-import org.openstreetmap.josm.gui.util.GuiHelper;
-import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
-import org.openstreetmap.josm.gui.util.ModifierExListener;
-import org.openstreetmap.josm.spi.preferences.Config;
-import org.openstreetmap.josm.spi.preferences.PreferenceChangeEvent;
-import org.openstreetmap.josm.tools.Geometry;
-import org.openstreetmap.josm.tools.ImageProvider;
-import org.openstreetmap.josm.tools.Logging;
-import org.openstreetmap.josm.tools.Pair;
-import org.openstreetmap.josm.tools.Shortcut;
-import org.openstreetmap.josm.tools.Utils;
+import static org.openstreetmap.josm.tools.I18n.*;
 
 /**
  * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
  */
-public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintable,
-        DataSelectionListener, ModifierExListener, KeyPressReleaseListener,
-        ExpertModeChangeListener {
+public class ImproveWayAccuracyAction
+    extends org.openstreetmap.josm.actions.mapmode.ImproveWayAccuracyAction
+    implements KeyPressReleaseListener, ExpertModeChangeListener, PreferenceChangedListener
+{
+    protected Color turnColor;
+    protected Color distanceColor;
+    protected Color arcFillColor;
+    protected Color arcStrokeColor;
+    protected Color perpendicularLineColor;
+    protected Color equalAngleCircleColor;
 
-    enum State {
-        selecting, improving
-    }
+    protected transient Stroke arcStroke;
+    protected transient Stroke perpendicularLineStroke;
+    protected transient Stroke equalAngleCircleStroke;
+    protected int dotSize;
 
-    private State state;
-
-    private MapView mv;
-
-    private static final long serialVersionUID = 42L;
-
-    private transient Way targetWay;
-    private transient Node candidateNode;
-    private transient IWaySegment<Node, Way> candidateSegment;
-
-    private Point mousePos;
-    private boolean dragging;
-
-    private final Cursor cursorSelect;
-    private final Cursor cursorSelectHover;
-    private final Cursor cursorImprove;
-    private final Cursor cursorImproveAdd;
-    private final Cursor cursorImproveDelete;
-    private final Cursor cursorImproveAddLock;
-    private final Cursor cursorImproveLock;
-
-    private Color guideColor;
-    private Color turnColor;
-    private Color distanceColor;
-    private Color arcFillColor;
-    private Color arcStrokeColor;
-    private Color perpendicularLineColor;
-    private Color equalAngleCircleColor;
-
-    private transient Stroke selectTargetWayStroke;
-    private transient Stroke moveNodeStroke;
-    private transient Stroke moveNodeIntersectingStroke;
-    private transient Stroke addNodeStroke;
-    private transient Stroke deleteNodeStroke;
-    private transient Stroke arcStroke;
-    private transient Stroke perpendicularLineStroke;
-    private transient Stroke equalAngleCircleStroke;
-    private int dotSize;
-
-    private boolean selectionChangedBlocked;
+    protected boolean selectionChangedBlocked;
 
     protected String oldModeHelpText;
 
-    private int arcRadiusPixels;
-    private int perpendicularLengthPixels;
-    private int turnTextDistance;
-    private int distanceTextDistance;
-    private int equalAngleCircleRadius;
-    private long longKeypressTime;
+    protected int arcRadiusPixels;
+    protected int perpendicularLengthPixels;
+    protected int turnTextDistance;
+    protected int distanceTextDistance;
+    protected int equalAngleCircleRadius;
+    protected long longKeypressTime;
 
-    private boolean helpersEnabled = false;
-    private boolean helpersUseOriginal = false;
-    private final transient Shortcut helpersShortcut;
-    private long keypressTime = 0;
-    private boolean helpersEnabledBeforeKeypressed = false;
-    private Timer longKeypressTimer;
-    private boolean isExpert = false;
+    protected boolean helpersEnabled = false;
+    protected boolean helpersUseOriginal = false;
+    protected final transient Shortcut helpersShortcut;
+    protected long keypressTime = 0;
+    protected boolean helpersEnabledBeforeKeypressed = false;
+    protected Timer longKeypressTimer;
+    protected boolean isExpert = false;
 
-    private boolean mod4 = false; // Windows/Super/Meta key
+    protected boolean mod4 = false; // Windows/Super/Meta key
 
     /**
      * Constructs a new {@code ImproveWayAccuracyAction}.
      */
     public ImproveWayAccuracyAction() {
         super(tr("Improve Way"), "improveway",
-                tr("Improve Way mode"),
-                Shortcut.registerShortcut("mapmode:ImproveWay",
+            tr("Improve Way mode"),
+            Shortcut.registerShortcut("mapmode:ImproveWay",
                 tr("Mode: {0}", tr("Improve Way")),
                 KeyEvent.VK_W, Shortcut.DIRECT), Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
 
         helpersShortcut = Shortcut.registerShortcut("mapmode:enablewayaccuracyhelpers",
                 tr("Mode: Enable way accuracy helpers"), KeyEvent.CHAR_UNDEFINED, Shortcut.NONE);
 
-        cursorSelect = ImageProvider.getCursor("normal", "mode");
-        cursorSelectHover = ImageProvider.getCursor("hand", "mode");
-        cursorImprove = ImageProvider.getCursor("crosshair", null);
-        cursorImproveAdd = ImageProvider.getCursor("crosshair", "addnode");
-        cursorImproveDelete = ImageProvider.getCursor("crosshair", "delete_node");
-        cursorImproveAddLock = ImageProvider.getCursor("crosshair",
-                "add_node_lock");
-        cursorImproveLock = ImageProvider.getCursor("crosshair", "lock");
         ExpertToggleAction.addExpertModeChangeListener(this, true);
-        readPreferences();
     }
 
     // -------------------------------------------------------------------------
@@ -168,30 +98,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
     // -------------------------------------------------------------------------
     @Override
     public void enterMode() {
-        if (!isEnabled()) {
-            return;
-        }
         super.enterMode();
-
-        MapFrame map = MainApplication.getMap();
-        mv = map.mapView;
-        mousePos = null;
-        oldModeHelpText = "";
-
-        if (getLayerManager().getEditDataSet() == null) {
-            return;
-        }
-
-        updateStateByCurrentSelection();
-
-        map.keyDetector.addKeyListener(this);
-        map.mapView.addMouseListener(this);
-        map.mapView.addMouseMotionListener(this);
-        map.mapView.addTemporaryLayer(this);
-        SelectionEventManager.getInstance().addSelectionListener(this);
-
-        map.keyDetector.addModifierExListener(this);
-
         if (!isExpert) return;
         helpersEnabled = false;
         keypressTime = 0;
@@ -208,7 +115,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     @Override
     protected void readPreferences() {
-        guideColor = new NamedColorProperty(marktr("improve way accuracy helper line"), Color.RED).get();
+        super.readPreferences();
         turnColor = new NamedColorProperty(marktr("improve way accuracy helper turn angle text"), new Color(240, 240, 240, 200)).get();
         distanceColor = new NamedColorProperty(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120)).get();
         arcFillColor = new NamedColorProperty(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50)).get();
@@ -218,16 +125,10 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         equalAngleCircleColor = new NamedColorProperty(marktr("improve way accuracy helper equal angle circle"), 
                 new Color(240, 240, 240, 150)).get();
 
-        selectTargetWayStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.select-target", "2"));
-        moveNodeStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.move-node", "1 6"));
-        moveNodeIntersectingStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.move-node-intersecting", "1 2 6"));
-        addNodeStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.add-node", "1"));
-        deleteNodeStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.delete-node", "1"));
         arcStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.helper-arc", "1"));
         perpendicularLineStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.helper-perpendicular-line", "1 6"));
         equalAngleCircleStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.helper-eual-angle-circle", "1"));
 
-        dotSize = Config.getPref().getInt("improvewayaccuracy.dot-size", 6);
         arcRadiusPixels = Config.getPref().getInt("improvewayaccuracy.helper-arc-radius", 200);
         perpendicularLengthPixels = Config.getPref().getInt("improvewayaccuracy.helper-perpendicular-line-length", 100);
         turnTextDistance = Config.getPref().getInt("improvewayaccuracy.helper-turn-text-distance", 15);
@@ -236,58 +137,6 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         longKeypressTime = Config.getPref().getInt("improvewayaccuracy.long-keypress-time", 250);
     }
 
-    @Override
-    public void exitMode() {
-        super.exitMode();
-
-        MainApplication.getMap().keyDetector.removeKeyListener(this);
-        MainApplication.getMap().mapView.removeMouseListener(this);
-        MainApplication.getMap().mapView.removeMouseMotionListener(this);
-        MainApplication.getMap().mapView.removeTemporaryLayer(this);
-        SelectionEventManager.getInstance().removeSelectionListener(this);
-
-        MainApplication.getMap().keyDetector.removeModifierExListener(this);
-        MainApplication.getLayerManager().invalidateEditLayer();
-    }
-
-    @Override
-    protected void updateStatusLine() {
-        String newModeHelpText = getModeHelpText();
-        if (!newModeHelpText.equals(oldModeHelpText)) {
-            oldModeHelpText = newModeHelpText;
-            MainApplication.getMap().statusLine.setHelpText(newModeHelpText);
-            MainApplication.getMap().statusLine.repaint();
-        }
-    }
-
-    @Override
-    public String getModeHelpText() {
-        if (state == State.selecting) {
-            if (targetWay != null) {
-                return tr("Click on the way to start improving its shape.");
-            } else {
-                return tr("Select a way that you want to make more accurate.");
-            }
-        } else {
-            if (ctrl) {
-                return tr("Click to add a new node. Release Ctrl to move existing nodes or hold Alt to delete.");
-            } else if (alt) {
-                return tr("Click to delete the highlighted node. Release Alt to move existing nodes or hold Ctrl to add new nodes.");
-            } else {
-                return tr("Click to move the highlighted node. Hold Ctrl to add new nodes, or Alt to delete.");
-            }
-        }
-    }
-
-    @Override
-    public boolean layerIsSupported(Layer l) {
-        return l instanceof OsmDataLayer;
-    }
-
-    @Override
-    protected void updateEnabledState() {
-        setEnabled(getLayerManager().getEditLayer() != null);
-    }
 
     // -------------------------------------------------------------------------
     // MapViewPaintable methods
@@ -302,11 +151,12 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         g.setColor(guideColor);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        if (state == State.selecting && targetWay != null) {
+        if (state == State.SELECTING && targetWay != null) {
             // Highlighting the targetWay in Selecting state
             // Non-native highlighting is used, because sometimes highlighted
             // segments are covered with others, which is bad.
-            g.setStroke(selectTargetWayStroke);
+            BasicStroke stroke = SELECT_TARGET_WAY_STROKE.get();
+            g.setStroke(stroke);
 
             List<Node> nodes = targetWay.getNodes();
 
@@ -325,7 +175,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
             g.draw(b);
 
-        } else if (state == State.improving) {
+        } else if (state == State.IMPROVING) {
             // Drawing preview lines and highlighting the node
             // that is going to be moved.
             // Non-native highlighting is used here as well.
@@ -333,11 +183,11 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             // Finding endpoints
             Point p1 = null, p2 = null;
             if (ctrl && candidateSegment != null) {
-                g.setStroke(addNodeStroke);
+                g.setStroke(ADD_NODE_STROKE.get());
                 p1 = mv.getPoint(candidateSegment.getFirstNode());
                 p2 = mv.getPoint(candidateSegment.getSecondNode());
             } else if (!(alt ^ ctrl) && candidateNode != null) {
-                g.setStroke(moveNodeStroke);
+                g.setStroke(MOVE_NODE_STROKE.get());
                 List<Pair<Node, Node>> wpps = targetWay.getNodePairs(false);
                 for (Pair<Node, Node> wpp : wpps) {
                     if (wpp.a == candidateNode) {
@@ -351,7 +201,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
                     }
                 }
             } else if (alt && !ctrl && candidateNode != null) {
-                g.setStroke(deleteNodeStroke);
+                g.setStroke(DELETE_NODE_STROKE.get());
                 List<Node> nodes = targetWay.getNodes();
                 int index = nodes.indexOf(candidateNode);
 
@@ -397,7 +247,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             if (!alt && !ctrl && candidateNode != null) {
                 b.reset();
                 drawIntersectingWayHelperLines(mv, b, newPoint);
-                g.setStroke(moveNodeIntersectingStroke);
+                g.setStroke(MOVE_NODE_INTERSECTING_STROKE.get());
                 g.draw(b);
             }
 
@@ -532,7 +382,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
 
     // returns node index for closed ways using possibly under/overflowed index
     // returns -1 if not closed and out of range
-    private int fixIndex(int count, boolean closed, int index) {
+    protected int fixIndex(int count, boolean closed, int index) {
         if (index >= 0 && index < count) return index;
         if (!closed) return -1;
         while (index < 0) index += count;
@@ -540,7 +390,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         return index;
     }
 
-    private double fixHeading(double heading) {
+    protected double fixHeading(double heading) {
         while (heading < -180) heading += 360;
         while (heading > 180) heading -= 360;
         return heading;
@@ -637,50 +487,6 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Event handlers
-    // -------------------------------------------------------------------------
-    @Override
-    public void modifiersExChanged(int modifiers) {
-        if (!MainApplication.isDisplayingMapView() || !MainApplication.getMap().mapView.isActiveLayerDrawable()) {
-            return;
-        }
-        updateKeyModifiersEx(modifiers);
-        updateCursorDependentObjectsIfNeeded();
-        updateCursor();
-        updateStatusLine();
-        MainApplication.getLayerManager().invalidateEditLayer();
-    }
-
-    @Override
-    public void selectionChanged(SelectionChangeEvent event) {
-        if (selectionChangedBlocked) {
-            return;
-        }
-        updateStateByCurrentSelection();
-    }
-
-    @Override
-    public void mouseDragged(MouseEvent e) {
-        dragging = true;
-        mouseMoved(e);
-    }
-
-    @Override
-    public void mouseMoved(MouseEvent e) {
-        if (!isEnabled()) {
-            return;
-        }
-
-        mousePos = e.getPoint();
-
-        updateKeyModifiers(e);
-        updateCursorDependentObjectsIfNeeded();
-        updateCursor();
-        updateStatusLine();
-        MainApplication.getLayerManager().invalidateEditLayer();
-    }
-
     @Override
     public void mouseReleased(MouseEvent e) {
         dragging = false;
@@ -692,12 +498,12 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         mousePos = e.getPoint();
         EastNorth newPointEN = getNewPointEN();
 
-        if (state == State.selecting) {
+        if (state == State.SELECTING) {
             if (targetWay != null) {
                 getLayerManager().getEditDataSet().setSelected(targetWay.getPrimitiveId());
                 updateStateByCurrentSelection();
             }
-        } else if (state == State.improving && newPointEN != null) {
+        } else if (state == State.IMPROVING && newPointEN != null) {
             // Checking if the new coordinate is outside of the world
             if (new Node(newPointEN).isOutSideWorld()) {
                 JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
@@ -810,160 +616,7 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
         MainApplication.getLayerManager().invalidateEditLayer();
     }
 
-    @Override
-    public void mouseExited(MouseEvent e) {
-        if (!isEnabled()) {
-            return;
-        }
-
-        if (!dragging) {
-            mousePos = null;
-        }
-        MainApplication.getLayerManager().invalidateEditLayer();
-    }
-
-    // -------------------------------------------------------------------------
-    // Custom methods
-    // -------------------------------------------------------------------------
-    /**
-     * Sets new cursor depending on state, mouse position
-     */
-    private void updateCursor() {
-        if (!isEnabled()) {
-            mv.setNewCursor(null, this);
-            return;
-        }
-
-        if (state == State.selecting) {
-            mv.setNewCursor(targetWay == null ? cursorSelect
-                    : cursorSelectHover, this);
-        } else if (state == State.improving) {
-            if (alt && !ctrl) {
-                mv.setNewCursor(cursorImproveDelete, this);
-            } else if (shift || dragging) {
-                if (ctrl) {
-                    mv.setNewCursor(cursorImproveAddLock, this);
-                } else {
-                    mv.setNewCursor(cursorImproveLock, this);
-                }
-            } else if (ctrl && !alt) {
-                mv.setNewCursor(cursorImproveAdd, this);
-            } else {
-                mv.setNewCursor(cursorImprove, this);
-            }
-        }
-    }
-
-    /**
-     * Updates these objects under cursor: targetWay, candidateNode,
-     * candidateSegment
-     */
-    public void updateCursorDependentObjectsIfNeeded() {
-        if (state == State.improving && (shift || dragging)
-                && !(candidateNode == null && candidateSegment == null)) {
-            return;
-        }
-
-        if (mousePos == null) {
-            candidateNode = null;
-            candidateSegment = null;
-            return;
-        }
-
-        if (state == State.selecting) {
-            targetWay = ImproveWayAccuracyHelper.findWay(mv, mousePos);
-        } else if (state == State.improving) {
-            if (ctrl && !alt) {
-                candidateSegment = ImproveWayAccuracyHelper.findCandidateSegment(mv,
-                        targetWay, mousePos);
-                candidateNode = null;
-            } else {
-                candidateNode = ImproveWayAccuracyHelper.findCandidateNode(mv,
-                        targetWay, mousePos);
-                candidateSegment = null;
-            }
-        }
-    }
-
-    /**
-     * Switches to Selecting state
-     */
-    public void startSelecting() {
-        state = State.selecting;
-
-        targetWay = null;
-
-        MainApplication.getLayerManager().invalidateEditLayer();
-        updateStatusLine();
-    }
-
-    /**
-     * Switches to Improving state
-     *
-     * @param targetWay Way that is going to be improved
-     */
-    public void startImproving(Way targetWay) {
-        state = State.improving;
-
-        Collection<OsmPrimitive> currentSelection = getLayerManager().getEditDataSet().getSelected();
-        if (currentSelection.size() != 1
-                || !currentSelection.iterator().next().equals(targetWay)) {
-            selectionChangedBlocked = true;
-            getLayerManager().getEditDataSet().clearSelection();
-            getLayerManager().getEditDataSet().setSelected(targetWay.getPrimitiveId());
-            selectionChangedBlocked = false;
-        }
-
-        this.targetWay = targetWay;
-        this.candidateNode = null;
-        this.candidateSegment = null;
-
-        MainApplication.getLayerManager().invalidateEditLayer();
-        updateStatusLine();
-    }
-
-    /**
-     * Updates the state according to the current selection. Goes to Improve
-     * state if a single way or node is selected. Extracts a way by a node in
-     * the second case.
-     *
-     */
-    private void updateStateByCurrentSelection() {
-        final List<Node> nodeList = new ArrayList<>();
-        final List<Way> wayList = new ArrayList<>();
-        final DataSet editDataSet = getLayerManager().getEditDataSet();
-        if (editDataSet != null) {
-            final Collection<OsmPrimitive> sel = editDataSet.getSelected();
-
-            // Collecting nodes and ways from the selection
-            for (OsmPrimitive p : sel) {
-                if (p instanceof Way) {
-                    wayList.add((Way) p);
-                }
-                if (p instanceof Node) {
-                    nodeList.add((Node) p);
-                }
-            }
-        }
-
-        if (wayList.size() == 1) {
-            // Starting improving the single selected way
-            startImproving(wayList.get(0));
-            return;
-        } else if (nodeList.size() == 1) {
-            // Starting improving the only way of the single selected node
-            List<OsmPrimitive> r = nodeList.get(0).getReferrers();
-            if (r.size() == 1 && (r.get(0) instanceof Way)) {
-                startImproving((Way) r.get(0));
-                return;
-            }
-        }
-
-        // Starting selecting by default
-        startSelecting();
-    }
-
-    private void resetTimer() {
+    protected void resetTimer() {
         if (longKeypressTimer != null) {
             try {
                 longKeypressTimer.cancel();
