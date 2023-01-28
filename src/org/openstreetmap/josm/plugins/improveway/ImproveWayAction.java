@@ -17,6 +17,7 @@ import org.openstreetmap.josm.data.preferences.NamedColorProperty;
 import org.openstreetmap.josm.data.projection.ProjectionRegistry;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapView;
+import org.openstreetmap.josm.gui.draw.MapViewPath;
 import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
 import org.openstreetmap.josm.spi.preferences.Config;
@@ -157,20 +158,7 @@ public class ImproveWayAction
 
             List<Node> nodes = targetWay.getNodes();
 
-            GeneralPath b = new GeneralPath();
-            Point p0 = mv.getPoint(nodes.get(0));
-            Point pn;
-            b.moveTo(p0.x, p0.y);
-
-            for (Node n : nodes) {
-                pn = mv.getPoint(n);
-                b.lineTo(pn.x, pn.y);
-            }
-            if (targetWay.isClosed()) {
-                b.lineTo(p0.x, p0.y);
-            }
-
-            g.draw(b);
+            g.draw(new MapViewPath(mv).append(nodes, false).computeClippedLine(stroke));
 
         } else if (state == State.IMPROVING) {
             // Drawing preview lines and highlighting the node
