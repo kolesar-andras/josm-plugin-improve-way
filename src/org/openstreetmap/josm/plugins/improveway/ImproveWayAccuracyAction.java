@@ -519,8 +519,8 @@ public class ImproveWayAccuracyAction extends MapMode implements MapViewPaintabl
             if (equalAngleEN != null) {
                 Point equalAnglePoint = mv.getPoint(equalAngleEN);
                 Ellipse2D.Double equalAngleCircle = new Ellipse2D.Double(
-                    equalAnglePoint.x-equalAngleCircleRadius/2,
-                    equalAnglePoint.y-equalAngleCircleRadius/2,
+                    equalAnglePoint.x-equalAngleCircleRadius/2d,
+                    equalAnglePoint.y-equalAngleCircleRadius/2d,
                     equalAngleCircleRadius,
                     equalAngleCircleRadius);
                 g.setStroke(equalAngleCircleStroke);
