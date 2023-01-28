@@ -16,7 +16,7 @@ public class ImproveWayPlugin extends Plugin {
     @Override
     public void mapFrameInitialized(MapFrame oldFrame, MapFrame newFrame) {
         if (oldFrame == null && newFrame != null) {
-            MainApplication.getMap().addMapMode(new IconToggleButton(new ImproveWayAccuracyAction(), false));
+            MainApplication.getMap().addMapMode(new IconToggleButton(new ImproveWayAction(), false));
         }
     }
 }

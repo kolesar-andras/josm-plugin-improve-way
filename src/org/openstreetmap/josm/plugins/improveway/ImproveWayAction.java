@@ -3,6 +3,7 @@ package org.openstreetmap.josm.plugins.improveway;
 
 import org.openstreetmap.josm.actions.ExpertToggleAction;
 import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
+import org.openstreetmap.josm.actions.mapmode.ImproveWayAccuracyAction;
 import org.openstreetmap.josm.command.*;
 import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.UndoRedoHandler;
@@ -40,8 +41,8 @@ import static org.openstreetmap.josm.tools.I18n.*;
 /**
  * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
  */
-public class ImproveWayAccuracyAction
-    extends org.openstreetmap.josm.actions.mapmode.ImproveWayAccuracyAction
+public class ImproveWayAction
+    extends ImproveWayAccuracyAction
     implements KeyPressReleaseListener, ExpertModeChangeListener, PreferenceChangedListener
 {
     protected Color turnColor;
@@ -80,7 +81,7 @@ public class ImproveWayAccuracyAction
     /**
      * Constructs a new {@code ImproveWayAccuracyAction}.
      */
-    public ImproveWayAccuracyAction() {
+    public ImproveWayAction() {
         super(tr("Improve Way"), "improveway",
             tr("Improve Way mode"),
             Shortcut.registerShortcut("mapmode:ImproveWay",
