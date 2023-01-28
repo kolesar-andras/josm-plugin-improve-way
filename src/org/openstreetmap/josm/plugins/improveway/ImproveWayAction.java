@@ -57,10 +57,6 @@ public class ImproveWayAction
     protected transient Stroke equalAngleCircleStroke;
     protected int dotSize;
 
-    protected boolean selectionChangedBlocked;
-
-    protected String oldModeHelpText;
-
     protected int arcRadiusPixels;
     protected int perpendicularLengthPixels;
     protected int turnTextDistance;
