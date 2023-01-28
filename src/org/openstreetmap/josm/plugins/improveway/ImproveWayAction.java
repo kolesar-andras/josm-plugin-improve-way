@@ -309,13 +309,13 @@ public class ImproveWayAction
                     point = mv.getPoint(coor);
                 }
                 if (nodeCounter >= 1) {
-                    heading = fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
+                    heading = ImproveWayHelper.fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
                     distance = lastcoor.greatCircleDistance(coor);
                     if (nodeCounter >= 2) {
-                        turn = Math.abs(fixHeading(heading-lastheading));
-                        double fixedHeading = fixHeading(heading - lastheading);
+                        turn = Math.abs(ImproveWayHelper.fixHeading(heading-lastheading));
+                        double fixedHeading = ImproveWayHelper.fixHeading(heading - lastheading);
                         g.setColor(turnColor);
-                        drawDisplacedlabel(
+                        ImproveWayHelper.drawDisplacedlabel(
                             lastpoint.x,
                             lastpoint.y,
                             turnTextDistance,
@@ -344,7 +344,7 @@ public class ImproveWayAction
                     // avoid doubling first segment on closed ways
                     if (i != nodesCount) {
                         g.setColor(distanceColor);
-                        drawDisplacedlabel(
+                        ImproveWayHelper.drawDisplacedlabel(
                             (lastpoint.x+point.x)/2,
                             (lastpoint.y+point.y)/2,
                             distanceTextDistance,
@@ -377,41 +377,6 @@ public class ImproveWayAction
         }
     }
 
-    // returns node index for closed ways using possibly under/overflowed index
-    // returns -1 if not closed and out of range
-    protected int fixIndex(int count, boolean closed, int index) {
-        if (index >= 0 && index < count) return index;
-        if (!closed) return -1;
-        while (index < 0) index += count;
-        while (index >= count) index -= count;
-        return index;
-    }
-
-    protected double fixHeading(double heading) {
-        while (heading < -180) heading += 360;
-        while (heading > 180) heading -= 360;
-        return heading;
-    }
-
-    public static void drawDisplacedlabel(
-        int x,
-        int y,
-        int distance,
-        double heading,
-        String labelText,
-        Graphics2D g
-    ) {
-        int labelWidth, labelHeight;
-        FontMetrics fontMetrics = g.getFontMetrics();
-        labelWidth = fontMetrics.stringWidth(labelText);
-        labelHeight = fontMetrics.getHeight();
-        g.drawString(
-           labelText,
-            (int) (x+(distance+(labelWidth-labelHeight)/2)*Math.cos(heading)-labelWidth/2),
-            (int) (y+distance*Math.sin(heading)+labelHeight/2)
-        );
-    }
-
     public EastNorth getNewPointEN() {
         if (mod4) {
             return findEqualAngleEN();
@@ -439,10 +404,10 @@ public class ImproveWayAction
             }
         }
 
-        int i11 = fixIndex(realNodesCount, targetWay.isClosed(), index1-1);
-        int i12 = fixIndex(realNodesCount, targetWay.isClosed(), index1);
-        int i21 = fixIndex(realNodesCount, targetWay.isClosed(), index2);
-        int i22 = fixIndex(realNodesCount, targetWay.isClosed(), index2+1);
+        int i11 = ImproveWayHelper.fixIndex(realNodesCount, targetWay.isClosed(), index1-1);
+        int i12 = ImproveWayHelper.fixIndex(realNodesCount, targetWay.isClosed(), index1);
+        int i21 = ImproveWayHelper.fixIndex(realNodesCount, targetWay.isClosed(), index2);
+        int i22 = ImproveWayHelper.fixIndex(realNodesCount, targetWay.isClosed(), index2+1);
         if (i11 < 0 || i12 < 0 || i21 < 0 || i22 < 0) return null;
 
         EastNorth p11 = targetWay.getNode(i11).getEastNorth();
@@ -452,7 +417,7 @@ public class ImproveWayAction
 
         double a1 = Geometry.getSegmentAngle(p11, p12);
         double a2 = Geometry.getSegmentAngle(p21, p22);
-        double a = fixHeading((a2-a1)*180/Math.PI)*Math.PI/180/3;
+        double a = ImproveWayHelper.fixHeading((a2-a1)*180/Math.PI)*Math.PI/180/3;
 
         EastNorth p1r = p11.rotate(p12, -a);
         EastNorth p2r = p22.rotate(p21, a);
