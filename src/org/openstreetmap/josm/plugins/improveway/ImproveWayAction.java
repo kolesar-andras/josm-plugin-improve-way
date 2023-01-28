@@ -97,6 +97,7 @@ public class ImproveWayAction
     @Override
     public void enterMode() {
         super.enterMode();
+        MainApplication.getMap().keyDetector.addKeyListener(this);
         if (!isExpert) return;
         helpersEnabled = false;
         keypressTime = 0;
@@ -109,6 +110,12 @@ public class ImproveWayAction
                 MainApplication.getLayerManager().invalidateEditLayer();
             }
         }, longKeypressTime);
+    }
+
+    @Override
+    public void exitMode() {
+        super.exitMode();
+        MainApplication.getMap().keyDetector.removeKeyListener(this);
     }
 
     @Override
