@@ -141,14 +141,6 @@ public class ImproveWayAction
         longKeypressTime = Config.getPref().getInt("improvewayaccuracy.long-keypress-time", 250);
     }
 
-
-    // -------------------------------------------------------------------------
-    // MapViewPaintable methods
-    // -------------------------------------------------------------------------
-    /**
-     * Redraws temporary layer. Highlights targetWay in select mode. Draws
-     * preview lines in improve mode and highlights the candidateNode
-     */
     @Override
     public void paint(Graphics2D g, MapView mv, Bounds bbox) {
         super.paint(g, mv, bbox);
@@ -158,135 +150,151 @@ public class ImproveWayAction
             if (!helpersEnabled) return;
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-            // Perpendicular line at half distance
-            if (!(alt && !ctrl) && endpoint1 != null && endpoint2 != null) {
-                Point p1 = mv.getPoint(endpoint1);
-                Point p2 = mv.getPoint(endpoint2);
-                Point half = new Point(
-                    (p1.x + p2.x)/2,
-                    (p1.y + p2.y)/2
-                );
-                double heading = Math.atan2(
-                    p2.y-p1.y,
-                    p2.x-p1.x
-                ) + Math.PI/2;
-                g.setStroke(perpendicularLineStroke);
-                g.setColor(perpendicularLineColor);
-                g.draw(new Line2D.Double(
-                    half.x + perpendicularLengthPixels * Math.cos(heading),
-                    half.y + perpendicularLengthPixels * Math.sin(heading),
-                    half.x - perpendicularLengthPixels * Math.cos(heading),
-                    half.y - perpendicularLengthPixels * Math.sin(heading)
-                ));
+            drawHalfDistanceLine(g, mv);
+            drawTurnAnglePie(g, mv);
+            drawEqualAnglePoint(g, mv);
+        }
+    }
+
+    /**
+     * Draw a perpendicular line at half distance between two endpoints
+     */
+    protected void drawHalfDistanceLine(Graphics2D g, MapView mv) {
+        if (!(alt && !ctrl) && endpoint1 != null && endpoint2 != null) {
+            Point p1 = mv.getPoint(endpoint1);
+            Point p2 = mv.getPoint(endpoint2);
+            Point half = new Point(
+                (p1.x + p2.x)/2,
+                (p1.y + p2.y)/2
+            );
+            double heading = Math.atan2(
+                p2.y-p1.y,
+                p2.x-p1.x
+            ) + Math.PI/2;
+            g.setStroke(perpendicularLineStroke);
+            g.setColor(perpendicularLineColor);
+            g.draw(new Line2D.Double(
+                half.x + perpendicularLengthPixels * Math.cos(heading),
+                half.y + perpendicularLengthPixels * Math.sin(heading),
+                half.x - perpendicularLengthPixels * Math.cos(heading),
+                half.y - perpendicularLengthPixels * Math.sin(heading)
+            ));
+        }
+    }
+
+    /**
+     * Draw a pie (part of a circle) representing turn angle at each node
+     */
+    protected void drawTurnAnglePie(Graphics2D g, MapView mv) {
+        Node node;
+        LatLon coor, lastcoor = null;
+        Point point, lastpoint = null;
+        double distance;
+        double heading, lastheading = 0;
+        double turn;
+        Arc2D arc;
+        double arcRadius;
+        boolean candidateSegmentVisited = false;
+        int nodeCounter = 0;
+        int nodesCount = targetWay.getNodesCount();
+        int endLoop = nodesCount;
+        if (targetWay.isClosed()) endLoop++;
+
+        EastNorth newPointEN = getNewPointEN();
+        Point newPoint = mv.getPoint(newPointEN);
+
+        for (int i = 0; i < endLoop; i++) {
+            // when way is closed we visit second node again
+            // to get turn for start/end node
+            node = targetWay.getNode(i == nodesCount ? 1 : i);
+            if (!helpersUseOriginal && newPointEN != null &&
+                ctrl &&
+                !candidateSegmentVisited &&
+                candidateSegment != null &&
+                candidateSegment.getSecondNode() == node
+            ) {
+                coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
+                point = newPoint;
+                candidateSegmentVisited = true;
+                i--;
+            } else if (!helpersUseOriginal && newPointEN != null && !alt && !ctrl && node == candidateNode) {
+                coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
+                point = newPoint;
+            } else if (!helpersUseOriginal && alt && !ctrl && node == candidateNode) {
+                continue;
+            } else {
+                coor = node.getCoor();
+                point = mv.getPoint(coor);
             }
-
-            // Pie with turn angle
-            Node node;
-            LatLon coor, lastcoor = null;
-            Point point, lastpoint = null;
-            double distance;
-            double heading, lastheading = 0;
-            double turn;
-            Arc2D arc;
-            double arcRadius;
-            boolean candidateSegmentVisited = false;
-            int nodeCounter = 0;
-            int nodesCount = targetWay.getNodesCount();
-            int endLoop = nodesCount;
-            if (targetWay.isClosed()) endLoop++;
-
-            EastNorth newPointEN = getNewPointEN();
-            Point newPoint = mv.getPoint(newPointEN);
-
-            for (int i = 0; i < endLoop; i++) {
-                // when way is closed we visit second node again
-                // to get turn for start/end node
-                node = targetWay.getNode(i == nodesCount ? 1 : i);
-                if (!helpersUseOriginal && newPointEN != null &&
-                    ctrl &&
-                    !candidateSegmentVisited &&
-                    candidateSegment != null &&
-                    candidateSegment.getSecondNode() == node
-                ) {
-                    coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
-                    point = newPoint;
-                    candidateSegmentVisited = true;
-                    i--;
-                } else if (!helpersUseOriginal && newPointEN != null && !alt && !ctrl && node == candidateNode) {
-                    coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
-                    point = newPoint;
-                } else if (!helpersUseOriginal && alt && !ctrl && node == candidateNode) {
-                    continue;
-                } else {
-                    coor = node.getCoor();
-                    point = mv.getPoint(coor);
+            if (nodeCounter >= 1) {
+                heading = ImproveWayHelper.fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
+                distance = lastcoor.greatCircleDistance(coor);
+                if (nodeCounter >= 2) {
+                    turn = Math.abs(ImproveWayHelper.fixHeading(heading-lastheading));
+                    double fixedHeading = ImproveWayHelper.fixHeading(heading - lastheading);
+                    g.setColor(turnColor);
+                    ImproveWayHelper.drawDisplacedlabel(
+                        lastpoint.x,
+                        lastpoint.y,
+                        turnTextDistance,
+                        (lastheading + fixedHeading/2 + (fixedHeading >= 0 ? 90 : -90))*Math.PI/180,
+                        String.format("%1.0f °", turn),
+                        g
+                    );
+                    arcRadius = arcRadiusPixels;
+                    arc = new Arc2D.Double(
+                        lastpoint.x-arcRadius,
+                        lastpoint.y-arcRadius,
+                        arcRadius*2,
+                        arcRadius*2,
+                        -heading + (fixedHeading >= 0 ? 90 : -90),
+                        fixedHeading,
+                        Arc2D.PIE
+                    );
+                    g.setStroke(arcStroke);
+                    g.setColor(arcFillColor);
+                    g.fill(arc);
+                    g.setColor(arcStrokeColor);
+                    g.draw(arc);
                 }
-                if (nodeCounter >= 1) {
-                    heading = ImproveWayHelper.fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
-                    distance = lastcoor.greatCircleDistance(coor);
-                    if (nodeCounter >= 2) {
-                        turn = Math.abs(ImproveWayHelper.fixHeading(heading-lastheading));
-                        double fixedHeading = ImproveWayHelper.fixHeading(heading - lastheading);
-                        g.setColor(turnColor);
-                        ImproveWayHelper.drawDisplacedlabel(
-                            lastpoint.x,
-                            lastpoint.y,
-                            turnTextDistance,
-                            (lastheading + fixedHeading/2 + (fixedHeading >= 0 ? 90 : -90))*Math.PI/180,
-                            String.format("%1.0f °", turn),
-                            g
-                        );
-                        arcRadius = arcRadiusPixels;
-                        arc = new Arc2D.Double(
-                            lastpoint.x-arcRadius,
-                            lastpoint.y-arcRadius,
-                            arcRadius*2,
-                            arcRadius*2,
-                            -heading + (fixedHeading >= 0 ? 90 : -90),
-                            fixedHeading,
-                            Arc2D.PIE
-                        );
-                        g.setStroke(arcStroke);
-                        g.setColor(arcFillColor);
-                        g.fill(arc);
-                        g.setColor(arcStrokeColor);
-                        g.draw(arc);
-                    }
 
-                    // Display segment length
-                    // avoid doubling first segment on closed ways
-                    if (i != nodesCount) {
-                        g.setColor(distanceColor);
-                        ImproveWayHelper.drawDisplacedlabel(
-                            (lastpoint.x+point.x)/2,
-                            (lastpoint.y+point.y)/2,
-                            distanceTextDistance,
-                            (heading + 90)*Math.PI/180,
-                            String.format("%1.0f m", distance),
-                            g
-                        );
-                    }
-
-                    lastheading = heading;
+                // Display segment length
+                // avoid doubling first segment on closed ways
+                if (i != nodesCount) {
+                    g.setColor(distanceColor);
+                    ImproveWayHelper.drawDisplacedlabel(
+                        (lastpoint.x+point.x)/2,
+                        (lastpoint.y+point.y)/2,
+                        distanceTextDistance,
+                        (heading + 90)*Math.PI/180,
+                        String.format("%1.0f m", distance),
+                        g
+                    );
                 }
-                lastcoor = coor;
-                lastpoint = point;
-                nodeCounter++;
-            }
 
-            // Find and display point where turn angle will be same with two neighbours
-            EastNorth equalAngleEN = findEqualAngleEN();
-            if (equalAngleEN != null) {
-                Point equalAnglePoint = mv.getPoint(equalAngleEN);
-                Ellipse2D.Double equalAngleCircle = new Ellipse2D.Double(
-                    equalAnglePoint.x-equalAngleCircleRadius/2d,
-                    equalAnglePoint.y-equalAngleCircleRadius/2d,
-                    equalAngleCircleRadius,
-                    equalAngleCircleRadius);
-                g.setStroke(equalAngleCircleStroke);
-                g.setColor(equalAngleCircleColor);
-                g.draw(equalAngleCircle);
+                lastheading = heading;
             }
+            lastcoor = coor;
+            lastpoint = point;
+            nodeCounter++;
+        }
+    }
+
+    /**
+     * Draw a point where turn angle will be same with two neighbours
+     */
+    protected void drawEqualAnglePoint(Graphics2D g, MapView mv) {
+        EastNorth equalAngleEN = findEqualAngleEN();
+        if (equalAngleEN != null) {
+            Point equalAnglePoint = mv.getPoint(equalAngleEN);
+            Ellipse2D.Double equalAngleCircle = new Ellipse2D.Double(
+                equalAnglePoint.x-equalAngleCircleRadius/2d,
+                equalAnglePoint.y-equalAngleCircleRadius/2d,
+                equalAngleCircleRadius,
+                equalAngleCircleRadius);
+            g.setStroke(equalAngleCircleStroke);
+            g.setColor(equalAngleCircleColor);
+            g.draw(equalAngleCircle);
         }
     }
 
