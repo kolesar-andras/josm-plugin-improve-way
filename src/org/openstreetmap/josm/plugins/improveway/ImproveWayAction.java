@@ -353,10 +353,10 @@ public class ImproveWayAction
 
     @Override
     protected void updateMousePosition(MouseEvent e) {
-        if (meta) {
-            mousePos = mv.getPoint(findEqualAngleLatLon());
-        } else {
+        if (!meta) {
             super.updateMousePosition(e);
+        } else {
+            mousePos = mv.getPoint(findEqualAngleLatLon());
         }
     }
 
