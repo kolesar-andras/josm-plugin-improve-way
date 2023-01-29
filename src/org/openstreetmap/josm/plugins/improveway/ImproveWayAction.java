@@ -94,6 +94,7 @@ public class ImproveWayAction
     @Override
     public void enterMode() {
         super.enterMode();
+        meta = false;
         MainApplication.getMap().keyDetector.addKeyListener(this);
         if (!isExpert) return;
         helpersEnabled = false;
