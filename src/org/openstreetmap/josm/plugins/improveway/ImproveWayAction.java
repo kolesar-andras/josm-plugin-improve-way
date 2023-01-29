@@ -194,8 +194,8 @@ public class ImproveWayAction
         int endLoop = nodesCount;
         if (targetWay.isClosed()) endLoop++;
 
-        EastNorth newPointEN = getNewPointEN();
-        Point newPoint = mv.getPoint(newPointEN);
+        LatLon newLatLon = getNewLatLon();
+        Point newPoint = mv.getPoint(newLatLon);
 
         for (int i = 0; i < endLoop; i++) {
             // when way is closed we visit second node again
@@ -203,18 +203,18 @@ public class ImproveWayAction
             Node node = targetWay.getNode(i == nodesCount ? 1 : i);
             LatLon coor;
             Point point;
-            if (!helpersUseOriginal && newPointEN != null &&
+            if (!helpersUseOriginal && newLatLon != null &&
                 ctrl &&
                 !candidateSegmentVisited &&
                 candidateSegment != null &&
                 candidateSegment.getSecondNode() == node
             ) {
-                coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
+                coor = newLatLon;
                 point = newPoint;
                 candidateSegmentVisited = true;
                 i--;
-            } else if (!helpersUseOriginal && newPointEN != null && !alt && !ctrl && node == candidateNode) {
-                coor = ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN);
+            } else if (!helpersUseOriginal && newLatLon != null && !alt && !ctrl && node == candidateNode) {
+                coor = newLatLon;
                 point = newPoint;
             } else if (!helpersUseOriginal && alt && !ctrl && node == candidateNode) {
                 continue;
@@ -280,9 +280,9 @@ public class ImproveWayAction
      * Draw a point where turn angle will be same with two neighbours
      */
     protected void drawEqualAnglePoint(Graphics2D g, MapView mv) {
-        EastNorth equalAngleEN = findEqualAngleEN();
-        if (equalAngleEN != null) {
-            Point equalAnglePoint = mv.getPoint(equalAngleEN);
+        LatLon equalAngleLatLon = findEqualAngleLatLon();
+        if (equalAngleLatLon != null) {
+            Point equalAnglePoint = mv.getPoint(equalAngleLatLon);
             Ellipse2D.Double equalAngleCircle = new Ellipse2D.Double(
                 equalAnglePoint.x-equalAngleCircleRadius/2d,
                 equalAnglePoint.y-equalAngleCircleRadius/2d,
@@ -294,17 +294,17 @@ public class ImproveWayAction
         }
     }
 
-    public EastNorth getNewPointEN() {
+    public LatLon getNewLatLon() {
         if (meta) {
-            return findEqualAngleEN();
+            return findEqualAngleLatLon();
         } else if (mousePos != null) {
-            return mv.getEastNorth(mousePos.x, mousePos.y);
+            return mv.getLatLon(mousePos.x, mousePos.y);
         } else {
             return null;
         }
     }
 
-    public EastNorth findEqualAngleEN() {
+    public LatLon findEqualAngleLatLon() {
         int index1 = -1;
         int index2 = -1;
         int realNodesCount = targetWay.getRealNodesCount();
@@ -339,7 +339,8 @@ public class ImproveWayAction
         EastNorth p1r = p11.rotate(p12, -a);
         EastNorth p2r = p22.rotate(p21, a);
 
-        return Geometry.getLineLineIntersection(p1r, p12, p21, p2r);
+        EastNorth intersection = Geometry.getLineLineIntersection(p1r, p12, p21, p2r);
+        return ProjectionRegistry.getProjection().eastNorth2latlon(intersection);
     }
 
     @Override
@@ -351,16 +352,16 @@ public class ImproveWayAction
 
         updateKeyModifiers(e);
         mousePos = e.getPoint();
-        EastNorth newPointEN = getNewPointEN();
+        LatLon newLatLon = getNewLatLon();
 
         if (state == State.SELECTING) {
             if (targetWay != null) {
                 getLayerManager().getEditDataSet().setSelected(targetWay.getPrimitiveId());
                 updateStateByCurrentSelection();
             }
-        } else if (state == State.IMPROVING && newPointEN != null) {
+        } else if (state == State.IMPROVING && newLatLon != null) {
             // Checking if the new coordinate is outside of the world
-            if (new Node(newPointEN).isOutSideWorld()) {
+            if (new Node(newLatLon).isOutSideWorld()) {
                 JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
                         tr("Cannot add a node outside of the world."),
                         tr("Warning"), JOptionPane.WARNING_MESSAGE);
@@ -374,9 +375,7 @@ public class ImproveWayAction
                 Collection<Command> virtualCmds = new LinkedList<>();
 
                 // Creating a new node
-                Node virtualNode = new Node(
-                    ProjectionRegistry.getProjection().eastNorth2latlon(newPointEN)
-                );
+                Node virtualNode = new Node(newLatLon);
                 virtualCmds.add(new AddCommand(getLayerManager().getEditDataSet(), virtualNode));
 
                 // Looking for candidateSegment copies in ways that are
@@ -456,11 +455,8 @@ public class ImproveWayAction
 
             } else if (candidateNode != null) {
                 // Moving the highlighted node
-                EastNorth nodeEN = candidateNode.getEastNorth();
-
                 Node saveCandidateNode = candidateNode;
-                UndoRedoHandler.getInstance().add(new MoveCommand(candidateNode, newPointEN.east() - nodeEN.east(), newPointEN.north()
-                        - nodeEN.north()));
+                UndoRedoHandler.getInstance().add(new MoveCommand(candidateNode, newLatLon));
                 candidateNode = saveCandidateNode;
 
             }
