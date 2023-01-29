@@ -30,7 +30,6 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
-import java.awt.geom.GeneralPath;
 import java.awt.geom.Line2D;
 import java.util.List;
 import java.util.Timer;
@@ -55,7 +54,6 @@ public class ImproveWayAction
     protected transient Stroke arcStroke;
     protected transient Stroke perpendicularLineStroke;
     protected transient Stroke equalAngleCircleStroke;
-    protected int dotSize;
 
     protected int arcRadiusPixels;
     protected int perpendicularLengthPixels;
@@ -341,30 +339,6 @@ public class ImproveWayAction
         EastNorth p2r = p22.rotate(p21, a);
 
         return Geometry.getLineLineIntersection(p1r, p12, p21, p2r);
-    }
-
-    protected void drawIntersectingWayHelperLines(MapView mv, GeneralPath b, Point newPoint) {
-        for (final OsmPrimitive referrer : candidateNode.getReferrers()) {
-            if (!(referrer instanceof Way) || targetWay.equals(referrer)) {
-                continue;
-            }
-            final List<Node> nodes = ((Way) referrer).getNodes();
-            for (int i = 0; i < nodes.size(); i++) {
-                if (!candidateNode.equals(nodes.get(i))) {
-                    continue;
-                }
-                if (i > 0) {
-                    final Point p = mv.getPoint(nodes.get(i - 1));
-                    b.moveTo(newPoint.x, newPoint.y);
-                    b.lineTo(p.x, p.y);
-                }
-                if (i < nodes.size() - 1) {
-                    final Point p = mv.getPoint(nodes.get(i + 1));
-                    b.moveTo(newPoint.x, newPoint.y);
-                    b.lineTo(p.x, p.y);
-                }
-            }
-        }
     }
 
     @Override
