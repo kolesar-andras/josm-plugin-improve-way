@@ -70,7 +70,7 @@ public class ImproveWayAction
     protected Timer longKeypressTimer;
     protected boolean isExpert = false;
 
-    protected boolean mod4 = false; // Windows/Super/Meta key
+    protected boolean meta = false; // Windows/Super/Meta key
 
     /**
      * Constructs a new {@code ImproveWayAccuracyAction}.
@@ -294,7 +294,7 @@ public class ImproveWayAction
     }
 
     public EastNorth getNewPointEN() {
-        if (mod4) {
+        if (meta) {
             return findEqualAngleEN();
         } else if (mousePos != null) {
             return mv.getEastNorth(mousePos.x, mousePos.y);
@@ -485,7 +485,7 @@ public class ImproveWayAction
     @Override
     public void doKeyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
-            mod4 = true;
+            meta = true;
             MainApplication.getLayerManager().invalidateEditLayer();
             return;
         }
@@ -501,7 +501,7 @@ public class ImproveWayAction
     @Override
     public void doKeyReleased(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
-            mod4 = false;
+            meta = false;
             MainApplication.getLayerManager().invalidateEditLayer();
             return;
         }
