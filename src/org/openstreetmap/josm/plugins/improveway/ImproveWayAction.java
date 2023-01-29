@@ -183,6 +183,8 @@ public class ImproveWayAction
         double lastheading = 0d;
         boolean candidateSegmentVisited = false;
         int nodeCounter = 0;
+
+        if (targetWay == null) return;
         int nodesCount = targetWay.getNodesCount();
         int endLoop = nodesCount;
         if (targetWay.isClosed()) endLoop++;
@@ -300,6 +302,7 @@ public class ImproveWayAction
     public LatLon findEqualAngleLatLon() {
         int index1 = -1;
         int index2 = -1;
+        if (targetWay == null) return null;
         int realNodesCount = targetWay.getRealNodesCount();
 
         for (int i = 0; i < realNodesCount; i++) {
