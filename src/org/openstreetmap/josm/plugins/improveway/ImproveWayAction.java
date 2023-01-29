@@ -186,14 +186,9 @@ public class ImproveWayAction
      * Draw a pie (part of a circle) representing turn angle at each node
      */
     protected void drawTurnAnglePie(Graphics2D g, MapView mv) {
-        Node node;
-        LatLon coor, lastcoor = null;
-        Point point, lastpoint = null;
-        double distance;
-        double heading, lastheading = 0;
-        double turn;
-        Arc2D arc;
-        double arcRadius;
+        LatLon lastcoor = null;
+        Point lastpoint = null;
+        double lastheading = 0d;
         boolean candidateSegmentVisited = false;
         int nodeCounter = 0;
         int nodesCount = targetWay.getNodesCount();
@@ -206,7 +201,9 @@ public class ImproveWayAction
         for (int i = 0; i < endLoop; i++) {
             // when way is closed we visit second node again
             // to get turn for start/end node
-            node = targetWay.getNode(i == nodesCount ? 1 : i);
+            Node node = targetWay.getNode(i == nodesCount ? 1 : i);
+            LatLon coor;
+            Point point;
             if (!helpersUseOriginal && newPointEN != null &&
                 ctrl &&
                 !candidateSegmentVisited &&
@@ -226,11 +223,11 @@ public class ImproveWayAction
                 coor = node.getCoor();
                 point = mv.getPoint(coor);
             }
-            if (nodeCounter >= 1) {
-                heading = ImproveWayHelper.fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
-                distance = lastcoor.greatCircleDistance(coor);
+            if (nodeCounter >= 1 && lastcoor != null && lastpoint != null) {
+                double heading = ImproveWayHelper.fixHeading(-90+lastcoor.bearing(coor)*180/Math.PI);
+                double distance = lastcoor.greatCircleDistance(coor);
                 if (nodeCounter >= 2) {
-                    turn = Math.abs(ImproveWayHelper.fixHeading(heading-lastheading));
+                    double turn = Math.abs(ImproveWayHelper.fixHeading(heading-lastheading));
                     double fixedHeading = ImproveWayHelper.fixHeading(heading - lastheading);
                     g.setColor(turnColor);
                     ImproveWayHelper.drawDisplacedlabel(
@@ -241,8 +238,8 @@ public class ImproveWayAction
                         String.format("%1.0f °", turn),
                         g
                     );
-                    arcRadius = arcRadiusPixels;
-                    arc = new Arc2D.Double(
+                    double arcRadius = arcRadiusPixels;
+                    Arc2D arc = new Arc2D.Double(
                         lastpoint.x-arcRadius,
                         lastpoint.y-arcRadius,
                         arcRadius*2,
