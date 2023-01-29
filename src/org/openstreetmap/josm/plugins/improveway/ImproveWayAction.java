@@ -361,6 +361,13 @@ public class ImproveWayAction
     }
 
     @Override
+    public void updateCursorDependentObjectsIfNeeded() {
+        if (!meta) {
+            super.updateCursorDependentObjectsIfNeeded();
+        }
+    }
+
+    @Override
     public void doKeyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
             meta = true;
