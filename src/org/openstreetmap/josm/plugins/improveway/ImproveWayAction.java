@@ -4,15 +4,10 @@ package org.openstreetmap.josm.plugins.improveway;
 import org.openstreetmap.josm.actions.ExpertToggleAction;
 import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
 import org.openstreetmap.josm.actions.mapmode.ImproveWayAccuracyAction;
-import org.openstreetmap.josm.command.*;
 import org.openstreetmap.josm.data.Bounds;
-import org.openstreetmap.josm.data.UndoRedoHandler;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
-import org.openstreetmap.josm.data.osm.IWaySegment;
 import org.openstreetmap.josm.data.osm.Node;
-import org.openstreetmap.josm.data.osm.OsmPrimitive;
-import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.preferences.NamedColorProperty;
 import org.openstreetmap.josm.data.projection.ProjectionRegistry;
 import org.openstreetmap.josm.gui.MainApplication;
@@ -24,14 +19,12 @@ import org.openstreetmap.josm.spi.preferences.PreferenceChangeEvent;
 import org.openstreetmap.josm.spi.preferences.PreferenceChangedListener;
 import org.openstreetmap.josm.tools.*;
 
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
-import java.util.List;
 import java.util.Timer;
 import java.util.*;
 
@@ -343,130 +336,6 @@ public class ImproveWayAction
         return ProjectionRegistry.getProjection().eastNorth2latlon(intersection);
     }
 
-    @Override
-    public void mouseReleased(MouseEvent e) {
-        dragging = false;
-        if (!isEnabled() || e.getButton() != MouseEvent.BUTTON1) {
-            return;
-        }
-
-        updateKeyModifiers(e);
-        mousePos = e.getPoint();
-        LatLon newLatLon = getNewLatLon();
-
-        if (state == State.SELECTING) {
-            if (targetWay != null) {
-                getLayerManager().getEditDataSet().setSelected(targetWay.getPrimitiveId());
-                updateStateByCurrentSelection();
-            }
-        } else if (state == State.IMPROVING && newLatLon != null) {
-            // Checking if the new coordinate is outside of the world
-            if (new Node(newLatLon).isOutSideWorld()) {
-                JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
-                        tr("Cannot add a node outside of the world."),
-                        tr("Warning"), JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            if (ctrl && !alt && candidateSegment != null) {
-                // Adding a new node to the highlighted segment
-                // Important: If there are other ways containing the same
-                // segment, a node must added to all of that ways.
-                Collection<Command> virtualCmds = new LinkedList<>();
-
-                // Creating a new node
-                Node virtualNode = new Node(newLatLon);
-                virtualCmds.add(new AddCommand(getLayerManager().getEditDataSet(), virtualNode));
-
-                // Looking for candidateSegment copies in ways that are
-                // referenced
-                // by candidateSegment nodes
-                List<Way> firstNodeWays = new ArrayList<>(Utils.filteredCollection(
-                        candidateSegment.getFirstNode().getReferrers(),
-                        Way.class));
-                List<Way> secondNodeWays = new ArrayList<>(Utils.filteredCollection(
-                        candidateSegment.getFirstNode().getReferrers(),
-                        Way.class));
-
-                Collection<IWaySegment<?, Way>> virtualSegments = new LinkedList<>();
-                for (Way w : firstNodeWays) {
-                    List<Pair<Node, Node>> wpps = w.getNodePairs(true);
-                    for (Way w2 : secondNodeWays) {
-                        if (!w.equals(w2)) {
-                            continue;
-                        }
-                        // A way is referenced in both nodes.
-                        // Checking if there is such segment
-                        int i = -1;
-                        for (Pair<Node, Node> wpp : wpps) {
-                            ++i;
-                            boolean ab = wpp.a.equals(candidateSegment.getFirstNode())
-                                    && wpp.b.equals(candidateSegment.getSecondNode());
-                            boolean ba = wpp.b.equals(candidateSegment.getFirstNode())
-                                    && wpp.a.equals(candidateSegment.getSecondNode());
-                            if (ab || ba) {
-                                virtualSegments.add(new IWaySegment<>(w, i));
-                            }
-                        }
-                    }
-                }
-
-                // Adding the node to all segments found
-                for (IWaySegment<?, Way> virtualSegment : virtualSegments) {
-                    Way w = virtualSegment.getWay();
-                    Way wnew = new Way(w);
-                    wnew.addNode(virtualSegment.getUpperIndex(), virtualNode);
-                    virtualCmds.add(new ChangeCommand(w, wnew));
-                }
-
-                // Finishing the sequence command
-                String text = trn("Add a new node to way",
-                        "Add a new node to {0} ways",
-                        virtualSegments.size(), virtualSegments.size());
-
-                UndoRedoHandler.getInstance().add(new SequenceCommand(text, virtualCmds));
-
-            } else if (alt && !ctrl && candidateNode != null) {
-                // Deleting the highlighted node
-
-                //check to see if node is in use by more than one object
-                List<OsmPrimitive> referrers = candidateNode.getReferrers();
-                Collection<Way> ways = Utils.filteredCollection(referrers, Way.class);
-                if (referrers.size() != 1 || ways.size() != 1) {
-                    // detach node from way
-                    final Way newWay = new Way(targetWay);
-                    final List<Node> nodes = newWay.getNodes();
-                    nodes.remove(candidateNode);
-                    newWay.setNodes(nodes);
-                    UndoRedoHandler.getInstance().add(new ChangeCommand(targetWay, newWay));
-                } else if (candidateNode.isTagged()) {
-                    JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
-                            tr("Cannot delete node that has tags"),
-                            tr("Error"), JOptionPane.ERROR_MESSAGE);
-                } else {
-                    List<Node> nodeList = new ArrayList<>();
-                    nodeList.add(candidateNode);
-                    Command deleteCmd = DeleteCommand.delete(nodeList, true);
-                    if (deleteCmd != null) {
-                        UndoRedoHandler.getInstance().add(deleteCmd);
-                    }
-                }
-
-
-            } else if (candidateNode != null) {
-                // Moving the highlighted node
-                Node saveCandidateNode = candidateNode;
-                UndoRedoHandler.getInstance().add(new MoveCommand(candidateNode, newLatLon));
-                candidateNode = saveCandidateNode;
-
-            }
-        }
-
-        updateCursor();
-        updateStatusLine();
-        MainApplication.getLayerManager().invalidateEditLayer();
-    }
-
     protected void resetTimer() {
         if (longKeypressTimer != null) {
             try {
@@ -480,9 +349,19 @@ public class ImproveWayAction
     }
 
     @Override
+    protected void updateMousePosition(MouseEvent e) {
+        if (meta) {
+            mousePos = mv.getPoint(findEqualAngleLatLon());
+        } else {
+            super.updateMousePosition(e);
+        }
+    }
+
+    @Override
     public void doKeyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
             meta = true;
+            mousePos = mv.getPoint(findEqualAngleLatLon());
             MainApplication.getLayerManager().invalidateEditLayer();
             return;
         }
