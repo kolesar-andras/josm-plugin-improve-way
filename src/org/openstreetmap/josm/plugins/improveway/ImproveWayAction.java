@@ -17,7 +17,6 @@ import org.openstreetmap.josm.data.preferences.NamedColorProperty;
 import org.openstreetmap.josm.data.projection.ProjectionRegistry;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapView;
-import org.openstreetmap.josm.gui.draw.MapViewPath;
 import org.openstreetmap.josm.gui.util.GuiHelper;
 import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
 import org.openstreetmap.josm.spi.preferences.Config;
@@ -152,102 +151,17 @@ public class ImproveWayAction
      */
     @Override
     public void paint(Graphics2D g, MapView mv, Bounds bbox) {
+        super.paint(g, mv, bbox);
 
-        g.setColor(guideColor);
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        if (state == State.SELECTING && targetWay != null) {
-            // Highlighting the targetWay in Selecting state
-            // Non-native highlighting is used, because sometimes highlighted
-            // segments are covered with others, which is bad.
-            BasicStroke stroke = SELECT_TARGET_WAY_STROKE.get();
-            g.setStroke(stroke);
-
-            List<Node> nodes = targetWay.getNodes();
-
-            g.draw(new MapViewPath(mv).append(nodes, false).computeClippedLine(stroke));
-
-        } else if (state == State.IMPROVING) {
-            // Drawing preview lines and highlighting the node
-            // that is going to be moved.
-            // Non-native highlighting is used here as well.
-
-            // Finding endpoints
-            Point p1 = null, p2 = null;
-            if (ctrl && candidateSegment != null) {
-                g.setStroke(ADD_NODE_STROKE.get());
-                p1 = mv.getPoint(candidateSegment.getFirstNode());
-                p2 = mv.getPoint(candidateSegment.getSecondNode());
-            } else if (!(alt ^ ctrl) && candidateNode != null) {
-                g.setStroke(MOVE_NODE_STROKE.get());
-                List<Pair<Node, Node>> wpps = targetWay.getNodePairs(false);
-                for (Pair<Node, Node> wpp : wpps) {
-                    if (wpp.a == candidateNode) {
-                        p1 = mv.getPoint(wpp.b);
-                    }
-                    if (wpp.b == candidateNode) {
-                        p2 = mv.getPoint(wpp.a);
-                    }
-                    if (p1 != null && p2 != null) {
-                        break;
-                    }
-                }
-            } else if (alt && !ctrl && candidateNode != null) {
-                g.setStroke(DELETE_NODE_STROKE.get());
-                List<Node> nodes = targetWay.getNodes();
-                int index = nodes.indexOf(candidateNode);
-
-                // Only draw line if node is not first and/or last
-                if (index > 0 && index < (nodes.size() - 1)) {
-                    p1 = mv.getPoint(nodes.get(index - 1));
-                    p2 = mv.getPoint(nodes.get(index + 1));
-                }
-                // TODO: indicate what part that will be deleted? (for end nodes)
-            }
-
-            EastNorth newPointEN = getNewPointEN();
-            Point newPoint = mv.getPoint(newPointEN);
-
-            // Drawing preview lines
-            GeneralPath b = new GeneralPath();
-            if (alt && !ctrl) {
-                // In delete mode
-                if (p1 != null && p2 != null) {
-                    b.moveTo(p1.x, p1.y);
-                    b.lineTo(p2.x, p2.y);
-                }
-            } else if (newPointEN != null && newPoint != null) {
-                // In add or move mode
-                if (p1 != null) {
-                    b.moveTo(newPoint.x, newPoint.y);
-                    b.lineTo(p1.x, p1.y);
-                }
-                if (p2 != null) {
-                    b.moveTo(newPoint.x, newPoint.y);
-                    b.lineTo(p2.x, p2.y);
-                }
-            }
-            g.draw(b);
-
-            // Highlighting candidateNode
-            if (candidateNode != null) {
-                Point p = mv.getPoint(candidateNode);
-                g.setColor(guideColor);
-                g.fillRect(p.x - dotSize/2, p.y - dotSize/2, dotSize, dotSize);
-            }
-
-            if (!alt && !ctrl && candidateNode != null) {
-                b.reset();
-                drawIntersectingWayHelperLines(mv, b, newPoint);
-                g.setStroke(MOVE_NODE_INTERSECTING_STROKE.get());
-                g.draw(b);
-            }
-
+        if (state == State.IMPROVING) {
             // Painting helpers visualizing turn angles and more
             if (!helpersEnabled) return;
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
             // Perpendicular line at half distance
-            if (!(alt && !ctrl) && p1 != null && p2 != null) {
+            if (!(alt && !ctrl) && endpoint1 != null && endpoint2 != null) {
+                Point p1 = mv.getPoint(endpoint1);
+                Point p2 = mv.getPoint(endpoint2);
                 Point half = new Point(
                     (p1.x + p2.x)/2,
                     (p1.y + p2.y)/2
@@ -280,6 +194,10 @@ public class ImproveWayAction
             int nodesCount = targetWay.getNodesCount();
             int endLoop = nodesCount;
             if (targetWay.isClosed()) endLoop++;
+
+            EastNorth newPointEN = getNewPointEN();
+            Point newPoint = mv.getPoint(newPointEN);
+
             for (int i = 0; i < endLoop; i++) {
                 // when way is closed we visit second node again
                 // to get turn for start/end node
