@@ -1,8 +1,6 @@
 // License: GPL. For details, see LICENSE file.
 package org.openstreetmap.josm.plugins.improveway;
 
-import org.openstreetmap.josm.actions.ExpertToggleAction;
-import org.openstreetmap.josm.actions.ExpertToggleAction.ExpertModeChangeListener;
 import org.openstreetmap.josm.core.patch.ImproveWayAccuracyAction;
 import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.coor.EastNorth;
@@ -13,7 +11,6 @@ import org.openstreetmap.josm.data.projection.ProjectionRegistry;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapView;
 import org.openstreetmap.josm.gui.util.GuiHelper;
-import org.openstreetmap.josm.gui.util.KeyPressReleaseListener;
 import org.openstreetmap.josm.spi.preferences.Config;
 import org.openstreetmap.josm.spi.preferences.PreferenceChangeEvent;
 import org.openstreetmap.josm.spi.preferences.PreferenceChangedListener;
@@ -25,18 +22,14 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
-import java.util.Timer;
-import java.util.*;
 
 import static org.openstreetmap.josm.tools.I18n.*;
 
 /**
- * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
+ * @author András Kolesár kolesar@openstreetmap.hu 2016
  */
-public class ImproveWayAction
-    extends ImproveWayAccuracyAction
-    implements KeyPressReleaseListener, ExpertModeChangeListener, PreferenceChangedListener
-{
+public class ImproveWayAction extends ImproveWayAccuracyAction implements PreferenceChangedListener {
+
     protected Color turnColor;
     protected Color distanceColor;
     protected Color arcFillColor;
@@ -53,32 +46,22 @@ public class ImproveWayAction
     protected int turnTextDistance;
     protected int distanceTextDistance;
     protected int equalAngleCircleRadius;
-    protected long longKeypressTime;
 
-    protected boolean helpersEnabled = false;
-    protected boolean helpersUseOriginal = false;
-    protected final transient Shortcut helpersShortcut;
-    protected long keypressTime = 0;
-    protected boolean helpersEnabledBeforeKeypressed = false;
-    protected Timer longKeypressTimer;
-    protected boolean isExpert = false;
+    protected ImproveWaySettings settings = new ImproveWaySettings(this, getShortcut());
 
-    protected boolean meta = false; // Windows/Super/Meta key
-
-    /**
-     * Constructs a new {@code ImproveWayAccuracyAction}.
-     */
     public ImproveWayAction() {
-        super(tr("Improve Way"), "improveway",
+        super(
+            tr("Improve Way"),
+            "improveway",
             tr("Improve Way mode"),
-            Shortcut.registerShortcut("mapmode:ImproveWay",
+            Shortcut.registerShortcut(
+                "mapmode:ImproveWay",
                 tr("Mode: {0}", tr("Improve Way")),
-                KeyEvent.VK_W, Shortcut.DIRECT), Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
-
-        helpersShortcut = Shortcut.registerShortcut("mapmode:enablewayaccuracyhelpers",
-                tr("Mode: Enable way accuracy helpers"), KeyEvent.CHAR_UNDEFINED, Shortcut.NONE);
-
-        ExpertToggleAction.addExpertModeChangeListener(this, true);
+                KeyEvent.VK_W,
+                Shortcut.DIRECT
+            ),
+            Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR)
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -87,26 +70,13 @@ public class ImproveWayAction
     @Override
     public void enterMode() {
         super.enterMode();
-        meta = false;
-        MainApplication.getMap().keyDetector.addKeyListener(this);
-        if (!isExpert) return;
-        helpersEnabled = false;
-        keypressTime = 0;
-        resetTimer();
-        longKeypressTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                helpersEnabled = true;
-                helpersUseOriginal = true;
-                MainApplication.getLayerManager().invalidateEditLayer();
-            }
-        }, longKeypressTime);
+        settings.onEnterMode();
     }
 
     @Override
     public void exitMode() {
         super.exitMode();
-        MainApplication.getMap().keyDetector.removeKeyListener(this);
+        settings.onExitMode();
     }
 
     @Override
@@ -116,9 +86,9 @@ public class ImproveWayAction
         distanceColor = new NamedColorProperty(marktr("improve way accuracy helper distance text"), new Color(240, 240, 240, 120)).get();
         arcFillColor = new NamedColorProperty(marktr("improve way accuracy helper arc fill"), new Color(200, 200, 200, 50)).get();
         arcStrokeColor = new NamedColorProperty(marktr("improve way accuracy helper arc stroke"), new Color(240, 240, 240, 150)).get();
-        perpendicularLineColor = new NamedColorProperty(marktr("improve way accuracy helper perpendicular line"), 
+        perpendicularLineColor = new NamedColorProperty(marktr("improve way accuracy helper perpendicular line"),
                 new Color(240, 240, 240, 150)).get();
-        equalAngleCircleColor = new NamedColorProperty(marktr("improve way accuracy helper equal angle circle"), 
+        equalAngleCircleColor = new NamedColorProperty(marktr("improve way accuracy helper equal angle circle"),
                 new Color(240, 240, 240, 150)).get();
 
         arcStroke = GuiHelper.getCustomizedStroke(Config.getPref().get("improvewayaccuracy.stroke.helper-arc", "1"));
@@ -130,7 +100,7 @@ public class ImproveWayAction
         turnTextDistance = Config.getPref().getInt("improvewayaccuracy.helper-turn-text-distance", 15);
         distanceTextDistance = Config.getPref().getInt("improvewayaccuracy.helper-distance-text-distance", 15);
         equalAngleCircleRadius = Config.getPref().getInt("improvewayaccuracy.helper-equal-angle-circle-radius", 15);
-        longKeypressTime = Config.getPref().getInt("improvewayaccuracy.long-keypress-time", 250);
+        settings.longKeypressTime = Config.getPref().getInt("improvewayaccuracy.long-keypress-time", 250);
     }
 
     @Override
@@ -139,7 +109,7 @@ public class ImproveWayAction
 
         if (state == State.IMPROVING) {
             // Painting helpers visualizing turn angles and more
-            if (!helpersEnabled) return;
+            if (!settings.helpersEnabled) return;
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
             drawHalfDistanceLine(g, mv);
@@ -198,7 +168,7 @@ public class ImproveWayAction
             Node node = targetWay.getNode(i == nodesCount ? 1 : i);
             LatLon coor;
             Point point;
-            if (!helpersUseOriginal && newLatLon != null &&
+            if (!settings.helpersUseOriginal && newLatLon != null &&
                 ctrl &&
                 !candidateSegmentVisited &&
                 candidateSegment != null &&
@@ -208,10 +178,10 @@ public class ImproveWayAction
                 point = newPoint;
                 candidateSegmentVisited = true;
                 i--;
-            } else if (!helpersUseOriginal && newLatLon != null && !alt && !ctrl && node == candidateNode) {
+            } else if (!settings.helpersUseOriginal && newLatLon != null && !alt && !ctrl && node == candidateNode) {
                 coor = newLatLon;
                 point = newPoint;
-            } else if (!helpersUseOriginal && alt && !ctrl && node == candidateNode) {
+            } else if (!settings.helpersUseOriginal && alt && !ctrl && node == candidateNode) {
                 continue;
             } else {
                 coor = node.getCoor();
@@ -289,8 +259,8 @@ public class ImproveWayAction
         }
     }
 
-    public LatLon getNewLatLon() {
-        if (meta) {
+    protected LatLon getNewLatLon() {
+        if (settings.meta) {
             return findEqualAngleLatLon();
         } else if (mousePos != null) {
             return mv.getLatLon(mousePos.x, mousePos.y);
@@ -299,7 +269,11 @@ public class ImproveWayAction
         }
     }
 
-    public LatLon findEqualAngleLatLon() {
+    protected void setMouseToEqualAnglePoint() {
+        mousePos = mv.getPoint(findEqualAngleLatLon());
+    }
+
+    protected LatLon findEqualAngleLatLon() {
         int index1 = -1;
         int index2 = -1;
         if (targetWay == null) return null;
@@ -339,79 +313,19 @@ public class ImproveWayAction
         return ProjectionRegistry.getProjection().eastNorth2latlon(intersection);
     }
 
-    protected void resetTimer() {
-        if (longKeypressTimer != null) {
-            try {
-                longKeypressTimer.cancel();
-                longKeypressTimer.purge();
-            } catch (IllegalStateException exception) {
-                Logging.debug(exception);
-            }
-        }
-        longKeypressTimer = new Timer();
-    }
-
     @Override
     protected void updateMousePosition(MouseEvent e) {
-        if (!meta) {
+        if (!settings.meta) {
             super.updateMousePosition(e);
         } else {
-            mousePos = mv.getPoint(findEqualAngleLatLon());
+            setMouseToEqualAnglePoint();
         }
     }
 
     @Override
     public void updateCursorDependentObjectsIfNeeded() {
-        if (!meta) {
+        if (!settings.meta) {
             super.updateCursorDependentObjectsIfNeeded();
-        }
-    }
-
-    @Override
-    public void doKeyPressed(KeyEvent e) {
-        if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
-            meta = true;
-            mousePos = mv.getPoint(findEqualAngleLatLon());
-            MainApplication.getLayerManager().invalidateEditLayer();
-            return;
-        }
-        if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
-        if (!isExpert) return;
-        keypressTime = System.currentTimeMillis();
-        helpersEnabledBeforeKeypressed = helpersEnabled;
-        if (!helpersEnabled) helpersEnabled = true;
-        helpersUseOriginal = true;
-        MainApplication.getLayerManager().invalidateEditLayer();
-    }
-
-    @Override
-    public void doKeyReleased(KeyEvent e) {
-        if (e.getKeyCode() == KeyEvent.VK_WINDOWS) {
-            meta = false;
-            MainApplication.getLayerManager().invalidateEditLayer();
-            return;
-        }
-        if (!helpersShortcut.isEvent(e) && !getShortcut().isEvent(e)) return;
-        if (!isExpert) return;
-        resetTimer();
-        long keyupTime = System.currentTimeMillis();
-        if (keypressTime == 0) { // comes from enterMode
-            helpersEnabled = false;
-        } else if (keyupTime-keypressTime > longKeypressTime) {
-            helpersEnabled = helpersEnabledBeforeKeypressed;
-        } else {
-            helpersEnabled = !helpersEnabledBeforeKeypressed;
-        }
-        helpersUseOriginal = false;
-        MainApplication.getLayerManager().invalidateEditLayer();
-    }
-
-    @Override
-    public void expertChanged(boolean isExpert) {
-        this.isExpert = isExpert;
-        if (!isExpert && helpersEnabled) {
-            helpersEnabled = false;
-            MainApplication.getLayerManager().invalidateEditLayer();
         }
     }
 
@@ -422,4 +336,5 @@ public class ImproveWayAction
             MainApplication.getLayerManager().invalidateEditLayer();
         }
     }
+
 }
