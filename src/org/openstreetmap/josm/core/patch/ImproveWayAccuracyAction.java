@@ -1,0 +1,747 @@
+/**
+ * This file is copy of same named class
+ * from package org.openstreetmap.josm.actions.mapmode
+ * --
+ * Serves as base class for ImproveWay plugin
+ * until this file is merged in core.
+ */
+
+// License: GPL. For details, see LICENSE file.
+package org.openstreetmap.josm.core.patch;
+
+import static org.openstreetmap.josm.tools.I18n.marktr;
+import static org.openstreetmap.josm.tools.I18n.tr;
+import static org.openstreetmap.josm.tools.I18n.trn;
+
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Cursor;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+
+import javax.swing.JOptionPane;
+
+import org.openstreetmap.josm.actions.mapmode.MapMode;
+import org.openstreetmap.josm.command.AddCommand;
+import org.openstreetmap.josm.command.ChangeNodesCommand;
+import org.openstreetmap.josm.command.Command;
+import org.openstreetmap.josm.command.DeleteCommand;
+import org.openstreetmap.josm.command.MoveCommand;
+import org.openstreetmap.josm.command.SequenceCommand;
+import org.openstreetmap.josm.data.Bounds;
+import org.openstreetmap.josm.data.UndoRedoHandler;
+import org.openstreetmap.josm.data.coor.EastNorth;
+import org.openstreetmap.josm.data.osm.DataSelectionListener;
+import org.openstreetmap.josm.data.osm.DataSet;
+import org.openstreetmap.josm.data.osm.Node;
+import org.openstreetmap.josm.data.osm.OsmPrimitive;
+import org.openstreetmap.josm.data.osm.Way;
+import org.openstreetmap.josm.data.osm.WaySegment;
+import org.openstreetmap.josm.data.osm.event.AbstractDatasetChangedEvent;
+import org.openstreetmap.josm.data.osm.event.DataChangedEvent;
+import org.openstreetmap.josm.data.osm.event.DataSetListener;
+import org.openstreetmap.josm.data.osm.event.DatasetEventManager;
+import org.openstreetmap.josm.data.osm.event.DatasetEventManager.FireMode;
+import org.openstreetmap.josm.data.osm.event.NodeMovedEvent;
+import org.openstreetmap.josm.data.osm.event.PrimitivesAddedEvent;
+import org.openstreetmap.josm.data.osm.event.PrimitivesRemovedEvent;
+import org.openstreetmap.josm.data.osm.event.RelationMembersChangedEvent;
+import org.openstreetmap.josm.data.osm.event.SelectionEventManager;
+import org.openstreetmap.josm.data.osm.event.TagsChangedEvent;
+import org.openstreetmap.josm.data.osm.event.WayNodesChangedEvent;
+import org.openstreetmap.josm.data.preferences.CachingProperty;
+import org.openstreetmap.josm.data.preferences.IntegerProperty;
+import org.openstreetmap.josm.data.preferences.NamedColorProperty;
+import org.openstreetmap.josm.data.preferences.StrokeProperty;
+import org.openstreetmap.josm.gui.MainApplication;
+import org.openstreetmap.josm.gui.MapFrame;
+import org.openstreetmap.josm.gui.MapView;
+import org.openstreetmap.josm.gui.draw.MapViewPath;
+import org.openstreetmap.josm.gui.draw.SymbolShape;
+import org.openstreetmap.josm.gui.layer.AbstractMapViewPaintable;
+import org.openstreetmap.josm.gui.layer.Layer;
+import org.openstreetmap.josm.gui.util.ModifierExListener;
+import org.openstreetmap.josm.tools.ImageProvider;
+import org.openstreetmap.josm.tools.Logging;
+import org.openstreetmap.josm.tools.Pair;
+import org.openstreetmap.josm.tools.Shortcut;
+
+/**
+ * A special map mode that is optimized for improving way geometry.
+ * (by efficiently moving, adding and deleting way-nodes)
+ *
+ * @author Alexander Kachkaev &lt;alexander@kachkaev.ru&gt;, 2011
+ */
+public class ImproveWayAccuracyAction extends MapMode implements DataSelectionListener, DataSetListener, ModifierExListener {
+
+    protected static final String CROSSHAIR = /* ICON(cursor/)*/ "crosshair";
+
+    protected enum State {
+        SELECTING, IMPROVING
+    }
+
+    protected State state;
+
+    protected MapView mv;
+
+    protected static final long serialVersionUID = 42L;
+
+    protected transient Way targetWay;
+    protected transient Node candidateNode;
+    protected transient WaySegment candidateSegment;
+
+    protected Point mousePos;
+    protected boolean dragging;
+
+    protected Node endpoint1 = null;
+    protected Node endpoint2 = null;
+
+    protected final Cursor cursorSelect = ImageProvider.getCursor(/* ICON(cursor/)*/ "normal", /* ICON(cursor/modifier/)*/ "mode");
+    protected final Cursor cursorSelectHover = ImageProvider.getCursor(/* ICON(cursor/)*/ "hand", /* ICON(cursor/modifier/)*/ "mode");
+    protected final Cursor cursorImprove = ImageProvider.getCursor(CROSSHAIR, null);
+    protected final Cursor cursorImproveAdd = ImageProvider.getCursor(CROSSHAIR, /* ICON(cursor/modifier/)*/ "addnode");
+    protected final Cursor cursorImproveDelete = ImageProvider.getCursor(CROSSHAIR, /* ICON(cursor/modifier/)*/ "delete_node");
+    protected final Cursor cursorImproveAddLock = ImageProvider.getCursor(CROSSHAIR, /* ICON(cursor/modifier/)*/ "add_node_lock");
+    protected final Cursor cursorImproveLock = ImageProvider.getCursor(CROSSHAIR, /* ICON(cursor/modifier/)*/ "lock");
+
+    protected Color guideColor;
+
+    protected static final CachingProperty<BasicStroke> SELECT_TARGET_WAY_STROKE
+            = new StrokeProperty("improvewayaccuracy.stroke.select-target", "2").cached();
+    protected static final CachingProperty<BasicStroke> MOVE_NODE_STROKE
+            = new StrokeProperty("improvewayaccuracy.stroke.move-node", "1 6").cached();
+    protected static final CachingProperty<BasicStroke> MOVE_NODE_INTERSECTING_STROKE
+            = new StrokeProperty("improvewayaccuracy.stroke.move-node-intersecting", "1 2 6").cached();
+    protected static final CachingProperty<BasicStroke> ADD_NODE_STROKE
+            = new StrokeProperty("improvewayaccuracy.stroke.add-node", "1").cached();
+    protected static final CachingProperty<BasicStroke> DELETE_NODE_STROKE
+            = new StrokeProperty("improvewayaccuracy.stroke.delete-node", "1").cached();
+    protected static final CachingProperty<Integer> DOT_SIZE
+            = new IntegerProperty("improvewayaccuracy.dot-size", 6).cached();
+
+    protected boolean selectionChangedBlocked;
+
+    protected String oldModeHelpText;
+
+    protected final transient AbstractMapViewPaintable temporaryLayer = new AbstractMapViewPaintable() {
+        @Override
+        public void paint(Graphics2D g, MapView mv, Bounds bbox) {
+            ImproveWayAccuracyAction.this.paint(g, mv, bbox);
+        }
+    };
+
+    /**
+     * Constructs a new {@code ImproveWayAccuracyAction}.
+     * @since 11713
+     */
+    public ImproveWayAccuracyAction() {
+        super(tr("Improve Way Accuracy"), "improvewayaccuracy",
+                tr("Improve Way Accuracy mode"),
+                Shortcut.registerShortcut("mapmode:ImproveWayAccuracy",
+                tr("Mode: {0}", tr("Improve Way Accuracy")),
+                KeyEvent.VK_W, Shortcut.DIRECT), Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+
+        readPreferences();
+    }
+
+    protected ImproveWayAccuracyAction(String name, String iconName, String tooltip, Shortcut shortcut, Cursor cursor) {
+        super(name, iconName, tooltip, shortcut, cursor);
+    }
+
+    // -------------------------------------------------------------------------
+    // Mode methods
+    // -------------------------------------------------------------------------
+    @Override
+    public void enterMode() {
+        if (!isEnabled()) {
+            return;
+        }
+        super.enterMode();
+        readPreferences();
+
+        MapFrame map = MainApplication.getMap();
+        mv = map.mapView;
+        mousePos = null;
+        oldModeHelpText = "";
+
+        if (getLayerManager().getEditDataSet() == null) {
+            return;
+        }
+
+        updateStateByCurrentSelection();
+
+        map.mapView.addMouseListener(this);
+        map.mapView.addMouseMotionListener(this);
+        map.mapView.addTemporaryLayer(temporaryLayer);
+        SelectionEventManager.getInstance().addSelectionListener(this);
+        DatasetEventManager.getInstance().addDatasetListener(this, FireMode.IMMEDIATELY);
+
+        map.keyDetector.addModifierExListener(this);
+    }
+
+    @Override
+    protected void readPreferences() {
+        guideColor = new NamedColorProperty(marktr("improve way accuracy helper line"), Color.RED).get();
+    }
+
+    @Override
+    public void exitMode() {
+        super.exitMode();
+
+        MapFrame map = MainApplication.getMap();
+        map.mapView.removeMouseListener(this);
+        map.mapView.removeMouseMotionListener(this);
+        map.mapView.removeTemporaryLayer(temporaryLayer);
+        SelectionEventManager.getInstance().removeSelectionListener(this);
+        DatasetEventManager.getInstance().removeDatasetListener(this);
+
+        map.keyDetector.removeModifierExListener(this);
+        temporaryLayer.invalidate();
+        targetWay = null;
+        candidateNode = null;
+        candidateSegment = null;
+    }
+
+    @Override
+    protected void updateStatusLine() {
+        String newModeHelpText = getModeHelpText();
+        if (!newModeHelpText.equals(oldModeHelpText)) {
+            oldModeHelpText = newModeHelpText;
+            MapFrame map = MainApplication.getMap();
+            map.statusLine.setHelpText(newModeHelpText);
+            map.statusLine.repaint();
+        }
+    }
+
+    @Override
+    public String getModeHelpText() {
+        if (state == State.SELECTING) {
+            if (targetWay != null) {
+                return tr("Click on the way to start improving its shape.");
+            } else {
+                return tr("Select a way that you want to make more accurate.");
+            }
+        } else {
+            if (ctrl) {
+                return tr("Click to add a new node. Release Ctrl to move existing nodes or hold Alt to delete.");
+            } else if (alt) {
+                return tr("Click to delete the highlighted node. Release Alt to move existing nodes or hold Ctrl to add new nodes.");
+            } else {
+                return tr("Click to move the highlighted node. Hold Ctrl to add new nodes, or Alt to delete.");
+            }
+        }
+    }
+
+    @Override
+    public boolean layerIsSupported(Layer l) {
+        return isEditableDataLayer(l);
+    }
+
+    @Override
+    protected void updateEnabledState() {
+        setEnabled(getLayerManager().getEditLayer() != null);
+    }
+
+    // -------------------------------------------------------------------------
+    // MapViewPaintable methods
+    // -------------------------------------------------------------------------
+    /**
+     * Redraws temporary layer. Highlights targetWay in select mode. Draws
+     * preview lines in improve mode and highlights the candidateNode
+     * @param g The graphics
+     * @param mv The map view
+     * @param bbox The bounding box
+     */
+    public void paint(Graphics2D g, MapView mv, Bounds bbox) {
+        if (mousePos == null || (candidateNode != null && candidateNode.getDataSet() == null)) {
+            return;
+        }
+
+        g.setColor(guideColor);
+
+        if (state == State.SELECTING && targetWay != null) {
+            // Highlighting the targetWay in Selecting state
+            // Non-native highlighting is used, because sometimes highlighted
+            // segments are covered with others, which is bad.
+            BasicStroke stroke = SELECT_TARGET_WAY_STROKE.get();
+            g.setStroke(stroke);
+
+            List<Node> nodes = targetWay.getNodes();
+
+            g.draw(new MapViewPath(mv).append(nodes, false).computeClippedLine(stroke));
+
+        } else if (state == State.IMPROVING) {
+            // Drawing preview lines and highlighting the node
+            // that is going to be moved.
+            // Non-native highlighting is used here as well.
+            MapViewPath b = new MapViewPath(mv);
+            findEndpoints(g);
+            drawPreviewLines(g, b);
+            highlightCandidateNode(g, mv, b);
+        }
+    }
+
+    protected void findEndpoints(Graphics2D g) {
+        endpoint1 = null;
+        endpoint2 = null;
+        if (ctrl && candidateSegment != null) {
+            g.setStroke(ADD_NODE_STROKE.get());
+            try {
+                endpoint1 = candidateSegment.getFirstNode();
+                endpoint2 = candidateSegment.getSecondNode();
+            } catch (ArrayIndexOutOfBoundsException e) {
+                Logging.error(e);
+            }
+        } else if (!alt && !ctrl && candidateNode != null) {
+            g.setStroke(MOVE_NODE_STROKE.get());
+            List<Pair<Node, Node>> wpps = targetWay.getNodePairs(false);
+            for (Pair<Node, Node> wpp : wpps) {
+                if (wpp.a == candidateNode) {
+                    endpoint1 = wpp.b;
+                }
+                if (wpp.b == candidateNode) {
+                    endpoint2 = wpp.a;
+                }
+                if (endpoint1 != null && endpoint2 != null) {
+                    break;
+                }
+            }
+        } else if (alt && !ctrl && candidateNode != null) {
+            g.setStroke(DELETE_NODE_STROKE.get());
+            List<Node> nodes = targetWay.getNodes();
+            int index = nodes.indexOf(candidateNode);
+
+            // Only draw line if node is not first and/or last
+            if (index > 0 && index < (nodes.size() - 1)) {
+                endpoint1 = nodes.get(index - 1);
+                endpoint2 = nodes.get(index + 1);
+            } else if (targetWay.isClosed()) {
+                endpoint1 = targetWay.getNode(1);
+                endpoint2 = targetWay.getNode(nodes.size() - 2);
+            }
+            // TODO: indicate what part that will be deleted? (for end nodes)
+        }
+    }
+
+    protected void drawPreviewLines(Graphics2D g, MapViewPath b) {
+        if (alt && !ctrl) {
+            // In delete mode
+            if (endpoint1 != null && endpoint2 != null) {
+                b.moveTo(endpoint1);
+                b.lineTo(endpoint2);
+            }
+        } else {
+            // In add or move mode
+            if (endpoint1 != null) {
+                b.moveTo(mousePos.x, mousePos.y);
+                b.lineTo(endpoint1);
+            }
+            if (endpoint2 != null) {
+                b.moveTo(mousePos.x, mousePos.y);
+                b.lineTo(endpoint2);
+            }
+        }
+        g.draw(b.computeClippedLine(g.getStroke()));
+    }
+
+    protected void highlightCandidateNode(Graphics2D g, MapView mv, MapViewPath b) {
+        if (candidateNode != null) {
+            g.fill(new MapViewPath(mv).shapeAround(candidateNode, SymbolShape.SQUARE, DOT_SIZE.get()));
+        }
+
+        if (!alt && !ctrl && candidateNode != null) {
+            b.reset();
+            drawIntersectingWayHelperLines(b);
+            g.setStroke(MOVE_NODE_INTERSECTING_STROKE.get());
+            g.draw(b.computeClippedLine(g.getStroke()));
+        }
+    }
+
+    protected void drawIntersectingWayHelperLines(MapViewPath b) {
+        for (final OsmPrimitive referrer : candidateNode.getReferrers()) {
+            if (!(referrer instanceof Way) || targetWay.equals(referrer)) {
+                continue;
+            }
+            final List<Node> nodes = ((Way) referrer).getNodes();
+            for (int i = 0; i < nodes.size(); i++) {
+                if (!candidateNode.equals(nodes.get(i))) {
+                    continue;
+                }
+                if (i > 0) {
+                    b.moveTo(mousePos.x, mousePos.y);
+                    b.lineTo(nodes.get(i - 1));
+                }
+                if (i < nodes.size() - 1) {
+                    b.moveTo(mousePos.x, mousePos.y);
+                    b.lineTo(nodes.get(i + 1));
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Event handlers
+    // -------------------------------------------------------------------------
+    @Override
+    public void modifiersExChanged(int modifiers) {
+        if (!MainApplication.isDisplayingMapView() || !MainApplication.getMap().mapView.isActiveLayerDrawable()) {
+            return;
+        }
+        updateKeyModifiersEx(modifiers);
+        updateCursorDependentObjectsIfNeeded();
+        updateCursor();
+        updateStatusLine();
+        temporaryLayer.invalidate();
+    }
+
+    @Override
+    public void selectionChanged(SelectionChangeEvent event) {
+        if (selectionChangedBlocked) {
+            return;
+        }
+        updateStateByCurrentSelection();
+    }
+
+    @Override
+    public void mouseDragged(MouseEvent e) {
+        dragging = true;
+        mouseMoved(e);
+    }
+
+    @Override
+    public void mouseMoved(MouseEvent e) {
+        if (!isEnabled()) {
+            return;
+        }
+
+        updateMousePosition(e);
+        updateKeyModifiers(e);
+        updateCursorDependentObjectsIfNeeded();
+        updateCursor();
+        updateStatusLine();
+        temporaryLayer.invalidate();
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent e) {
+        dragging = false;
+        if (!isEnabled() || e.getButton() != MouseEvent.BUTTON1) {
+            return;
+        }
+
+        DataSet ds = getLayerManager().getEditDataSet();
+        updateKeyModifiers(e);
+        updateMousePosition(e);
+
+        if (state == State.SELECTING) {
+            if (targetWay != null) {
+                ds.setSelected(targetWay.getPrimitiveId());
+                updateStateByCurrentSelection();
+            }
+        } else if (state == State.IMPROVING) {
+            // Checking if the new coordinate is outside of the world
+            if (new Node(mv.getEastNorth(mousePos.x, mousePos.y)).isOutSideWorld()) {
+                JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
+                        tr("Cannot add a node outside of the world."),
+                        tr("Warning"), JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            if (ctrl && !alt && candidateSegment != null) {
+                // Add a new node to the highlighted segment.
+                Collection<WaySegment> virtualSegments = new LinkedList<>();
+
+                // Check if other ways have the same segment.
+                // We have to make sure that we add the new node to all of them.
+                Set<Way> commonParentWays = new HashSet<>(candidateSegment.getFirstNode().getParentWays());
+                commonParentWays.retainAll(candidateSegment.getSecondNode().getParentWays());
+                for (Way w : commonParentWays) {
+                    for (int i = 0; i < w.getNodesCount() - 1; i++) {
+                        WaySegment testWS = new WaySegment(w, i);
+                        if (testWS.isSimilar(candidateSegment)) {
+                            virtualSegments.add(testWS);
+                        }
+                    }
+                }
+
+                Collection<Command> virtualCmds = new LinkedList<>();
+                // Create the new node
+                Node virtualNode = new Node(mv.getEastNorth(mousePos.x, mousePos.y));
+                virtualCmds.add(new AddCommand(ds, virtualNode));
+
+                // Adding the node to all segments found
+                for (WaySegment virtualSegment : virtualSegments) {
+                    Way w = virtualSegment.getWay();
+                    List<Node> modNodes = w.getNodes();
+                    modNodes.add(virtualSegment.getUpperIndex(), virtualNode);
+                    virtualCmds.add(new ChangeNodesCommand(w, modNodes));
+                }
+
+                // Finishing the sequence command
+                String text = trn("Add a new node to way",
+                        "Add a new node to {0} ways",
+                        virtualSegments.size(), virtualSegments.size());
+
+                UndoRedoHandler.getInstance().add(new SequenceCommand(text, virtualCmds));
+
+            } else if (alt && !ctrl && candidateNode != null) {
+                // Deleting the highlighted node
+
+                //check to see if node is in use by more than one object
+                long referrersCount = candidateNode.referrers(OsmPrimitive.class).count();
+                long referrerWayCount = candidateNode.referrers(Way.class).count();
+                if (referrersCount != 1 || referrerWayCount != 1) {
+                    // detach node from way
+                    final List<Node> nodes = targetWay.getNodes();
+                    nodes.remove(candidateNode);
+                    if (nodes.size() < 2) {
+                        final Command deleteCmd = DeleteCommand.delete(Collections.singleton(targetWay), true);
+                        if (deleteCmd != null) {
+                            UndoRedoHandler.getInstance().add(deleteCmd);
+                        }
+                    } else {
+                        UndoRedoHandler.getInstance().add(new ChangeNodesCommand(targetWay, nodes));
+                    }
+                } else if (candidateNode.isTagged()) {
+                    JOptionPane.showMessageDialog(MainApplication.getMainFrame(),
+                            tr("Cannot delete node that has tags"),
+                            tr("Error"), JOptionPane.ERROR_MESSAGE);
+                } else {
+                    final Command deleteCmd = DeleteCommand.delete(Collections.singleton(candidateNode), true);
+                    if (deleteCmd != null) {
+                        UndoRedoHandler.getInstance().add(deleteCmd);
+                    }
+                }
+
+            } else if (candidateNode != null) {
+                // Moving the highlighted node
+                EastNorth nodeEN = candidateNode.getEastNorth();
+                EastNorth cursorEN = mv.getEastNorth(mousePos.x, mousePos.y);
+
+                UndoRedoHandler.getInstance().add(
+                        new MoveCommand(candidateNode, cursorEN.east() - nodeEN.east(), cursorEN.north() - nodeEN.north()));
+
+                // TODO the following line is commented out in this copy because checkCommandForLargeDistance method is package private
+                // SelectAction.checkCommandForLargeDistance(UndoRedoHandler.getInstance().getLastCommand());
+            }
+        }
+
+        mousePos = null;
+        updateCursor();
+        updateStatusLine();
+        temporaryLayer.invalidate();
+    }
+
+    @Override
+    public void mouseExited(MouseEvent e) {
+        if (!isEnabled()) {
+            return;
+        }
+
+        if (!dragging) {
+            mousePos = null;
+        }
+        temporaryLayer.invalidate();
+    }
+
+    // -------------------------------------------------------------------------
+    // Custom methods
+    // -------------------------------------------------------------------------
+
+    /**
+     * Sets mouse position based on mouse event;
+     * this method allows extending classes to override position
+     */
+    protected void updateMousePosition(MouseEvent e) {
+        mousePos = e.getPoint();
+    }
+
+    /**
+     * Sets new cursor depending on state, mouse position
+     */
+    protected void updateCursor() {
+        if (!isEnabled()) {
+            mv.setNewCursor(null, this);
+            return;
+        }
+
+        if (state == State.SELECTING) {
+            mv.setNewCursor(targetWay == null ? cursorSelect
+                    : cursorSelectHover, this);
+        } else if (state == State.IMPROVING) {
+            if (alt && !ctrl) {
+                mv.setNewCursor(cursorImproveDelete, this);
+            } else if (shift || dragging) {
+                if (ctrl) {
+                    mv.setNewCursor(cursorImproveAddLock, this);
+                } else {
+                    mv.setNewCursor(cursorImproveLock, this);
+                }
+            } else if (ctrl && !alt) {
+                mv.setNewCursor(cursorImproveAdd, this);
+            } else {
+                mv.setNewCursor(cursorImprove, this);
+            }
+        }
+    }
+
+    /**
+     * Updates these objects under cursor: targetWay, candidateNode,
+     * candidateSegment
+     */
+    public void updateCursorDependentObjectsIfNeeded() {
+        if (state == State.IMPROVING && (shift || dragging)
+                && !(candidateNode == null && candidateSegment == null)) {
+            return;
+        }
+
+        if (mousePos == null) {
+            candidateNode = null;
+            candidateSegment = null;
+            return;
+        }
+
+        if (state == State.SELECTING) {
+            targetWay = ImproveWayAccuracyHelper.findWay(mv, mousePos);
+        } else if (state == State.IMPROVING) {
+            if (ctrl && !alt) {
+                candidateSegment = ImproveWayAccuracyHelper.findCandidateSegment(mv,
+                        targetWay, mousePos);
+                candidateNode = null;
+            } else {
+                candidateNode = ImproveWayAccuracyHelper.findCandidateNode(mv,
+                        targetWay, mousePos);
+                candidateSegment = null;
+            }
+        }
+    }
+
+    /**
+     * Switches to Selecting state
+     */
+    public void startSelecting() {
+        state = State.SELECTING;
+
+        targetWay = null;
+
+        temporaryLayer.invalidate();
+        updateStatusLine();
+    }
+
+    /**
+     * Switches to Improving state
+     *
+     * @param targetWay Way that is going to be improved
+     */
+    public void startImproving(Way targetWay) {
+        state = State.IMPROVING;
+
+        DataSet ds = getLayerManager().getEditDataSet();
+        Collection<OsmPrimitive> currentSelection = ds.getSelected();
+        if (currentSelection.size() != 1
+                || !currentSelection.iterator().next().equals(targetWay)) {
+            selectionChangedBlocked = true;
+            ds.clearSelection();
+            ds.setSelected(targetWay.getPrimitiveId());
+            selectionChangedBlocked = false;
+        }
+
+        this.targetWay = targetWay;
+        this.candidateNode = null;
+        this.candidateSegment = null;
+
+        temporaryLayer.invalidate();
+        updateStatusLine();
+    }
+
+    /**
+     * Updates the state according to the current selection. Goes to Improve
+     * state if a single way or node is selected. Extracts a way by a node in
+     * the second case.
+     */
+    protected void updateStateByCurrentSelection() {
+        final List<Node> nodeList = new ArrayList<>();
+        final List<Way> wayList = new ArrayList<>();
+        final DataSet ds = getLayerManager().getEditDataSet();
+        if (ds != null) {
+            final Collection<OsmPrimitive> sel = ds.getSelected();
+
+            // Collecting nodes and ways from the selection
+            for (OsmPrimitive p : sel) {
+                if (p instanceof Way) {
+                    wayList.add((Way) p);
+                }
+                if (p instanceof Node) {
+                    nodeList.add((Node) p);
+                }
+            }
+
+            if (wayList.size() == 1) {
+                // Starting improving the single selected way
+                startImproving(wayList.get(0));
+                return;
+            } else if (nodeList.size() == 1) {
+                // Starting improving the only way of the single selected node
+                List<OsmPrimitive> r = nodeList.get(0).getReferrers();
+                if (r.size() == 1 && (r.get(0) instanceof Way)) {
+                    startImproving((Way) r.get(0));
+                    return;
+                }
+            }
+        }
+
+        // Starting selecting by default
+        startSelecting();
+    }
+
+    @Override
+    public void primitivesRemoved(PrimitivesRemovedEvent event) {
+        if (event.getPrimitives().contains(candidateNode) || event.getPrimitives().contains(targetWay)) {
+            updateCursorDependentObjectsIfNeeded();
+        }
+    }
+
+    @Override
+    public void primitivesAdded(PrimitivesAddedEvent event) {
+        // Do nothing
+    }
+
+    @Override
+    public void tagsChanged(TagsChangedEvent event) {
+        // Do nothing
+    }
+
+    @Override
+    public void nodeMoved(NodeMovedEvent event) {
+        // Do nothing
+    }
+
+    @Override
+    public void wayNodesChanged(WayNodesChangedEvent event) {
+        // Do nothing
+    }
+
+    @Override
+    public void relationMembersChanged(RelationMembersChangedEvent event) {
+        // Do nothing
+    }
+
+    @Override
+    public void otherDatasetChange(AbstractDatasetChangedEvent event) {
+        // Do nothing
+    }
+
+    @Override
+    public void dataChanged(DataChangedEvent event) {
+        // Do nothing
+    }
+}
