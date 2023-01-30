@@ -1,7 +1,7 @@
 // License: GPL. For details, see LICENSE file.
 package org.openstreetmap.josm.plugins.improveway;
 
-import org.openstreetmap.josm.core.patch.ImproveWayAccuracyAction;
+import org.openstreetmap.josm.actions.mapmode.ImproveWayAccuracyAction;
 import org.openstreetmap.josm.data.Bounds;
 import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.coor.LatLon;
