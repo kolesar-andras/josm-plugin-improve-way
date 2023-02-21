@@ -1,6 +1,7 @@
 package org.openstreetmap.josm.plugins.improveway;
 
-import java.awt.*;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
 
 public class ImproveWayHelper {
     public static void drawDisplacedlabel(
